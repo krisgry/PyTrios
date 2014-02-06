@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PyTrios implements serial communication with TriOS sensors in the Python language\n
+Implements serial communication with TriOS sensors in the Python language\n
 
 Copyright (C) 2014  Stefan Simis for the Finnish Environment Institute SYKE\n
 Email firstname.lastname[_at_]environment.fi
@@ -24,34 +24,6 @@ Tested on Python 2.7.3\n
 Last update 16 Jan 2014\n
 
 *For example use please see the enclosed PyTrios_Examples.py script.*
-
-Basic use:
-    
->>>import PyTriosSerial as ps\n
-#monitor com port 16:
->>>coms = ps.TMonitor(16)\n
-#verbose monitoring on:\n
->>>coms[0].verbose.set()\n 
-#Query connected sensors:\n
->>>ps.TCommandSend(coms[0],commandset=None,command='query')\n
-#sample on a SAM sensor connected directly to the COM port (i.e. without multichannel IPS interface):\n
->>>ps.TCommandSend(coms[0],commandset='SAM',command='startIntAuto')\n
-#for a MicroFlu sensor:\n
-#turn off continuous sampling in MicroFlu module:\n
->>>ps.TCommandSend(coms[0],commandset='MicroFlu','cont_off')\n
-#single measurement in MicroFlu module:\n
->>>ps.TCommandSend(coms[0],commandset='MicroFlu','start')\n 
-#pause monitoring: (does not close COM port)\n
->>>for c in coms:\n
-    c.threadactive.clear()\n
-#continue monitoring:\n
->>>for c in coms:\n
-    c.threadactive.set()\n
-#terminate monitoring threads on program end:\n
->>>for c in coms:\n
-    c.threadlive.clear\n
-#close com ports:\n
->>>ps.TClose(coms)\n
 """
 import serial
 import time
@@ -60,7 +32,7 @@ import struct
 import numpy as np
 import threading
 
-__version__ = "2014.01.16"
+__version__ = "2014.02.04"
 
 class TProtocolError(Exception):
     def __init__(self, value):
@@ -68,43 +40,97 @@ class TProtocolError(Exception):
     def __str__(self):
         return repr(self.value)
 
-class TPacket: 
-    """store everything read from a single TrioS sensor data package"""
-    def __init__(self, TimeStampPC=datetime.datetime.now(), id1=None, id1_databytes=None, id1_fut=None, id1_id = None, id2=None, ModuleID=None, ModuleID_zipped = None, ModuleID_I2Cadd = None, Time1=None, Time2=None, Framebyte = None, DataVals = None, Checkbyte = None, Databytes = None, PacketType=None):
-        self.TimeStampPC = TimeStampPC
-        self.id1, self.id1_databytes, self.id1_fut, self.id1_id = id1, id1_databytes, id1_fut, id1_id
-        self.id2 = id2
-        self.ModuleID, self.ModuleID_zipped, self.ModuleID_I2Cadd = ModuleID, ModuleID_zipped, ModuleID_I2Cadd
-        self.Time1, self.Time2 = Time1, Time2
-        self.Framebyte = Framebyte
-        self.Databytes = Databytes
-        self.DataVals = DataVals
-        self.Checkbyte = Checkbyte
-        self.PacketType = PacketType
+class TPacket(object): 
+    """TrioS sensor data package object"""
+    def __init__(self, TimeStampPC=datetime.datetime.now(), id1=None, 
+                 id1_databytes=None, id1_fut=None, id1_id = None, id2=None, 
+                 ModuleID=None, ModuleID_zipped = None, ModuleID_I2Cadd = None, 
+                 Time1=None, Time2=None, Framebyte = None, DataVals = None, 
+                 Checkbyte = None, Databytes = None, PacketType=None):
+        pass
+    def __repr__(self):
+        return ("<PyTrios TPacket, Timestamp=%s, Framebyte=%s, PacketType=%s>" %
+                (self.TimeStampPC, self.Framebyte, self.PacketType))
 
-class TChannel: 
-    """store information on a TrioS channel, needed e.g. to interpret data packages"""
-    def __init__(self, TID = None, Tserialn=None, TModuleType=None, TFirmware=None, TModFreq=None, TFtype=None, TSMit=None, TCtlStart=None, TCtlAnalog=None,TCtlRange=None, TCtlAutoR=None, TCtlContn=None, TSAMspectrumframes = [[None]]*8, TlastRawdata=None, TlastCaldata = None, TlastTimestampPC = None, TMaster=None):
+class SAMSettings(object):
+    def __init__(self,SAMConfiguration = None, SAMRange = None, 
+                 SAMStatus =None): pass
+
+class TSAM(object):
+    """Stores data from connected MicroFlu instrument:\n
+    *Settings* = Sensor specific settings\n
+    *lastRawSAM* = last uncalibrated spectrum from SAM unit\n
+    *lastRawSAMTime* = Reception timestamp of last spectrum\n"""
+    def __init__(self,Settings=SAMSettings, dataframes=[[None]]*8,lastRawSAM=None,lastRawSAMTime=None):
+        self.Settings = Settings()
+        self.dataframes = dataframes
+    def __repr__(self):
+        try:
+            return ("<PyTrios SAM, last measurement received at %s>" %
+                (self.lastRawSAMTime))
+        except: return str(None)
+
+class TInfo(object):
+    """Basic information about connected instrument:\n
+    *TID* = Address\n
+    *ModuleType* = SAM, SAMIP, MicroFlu\n
+    *Firmware* = Sensor firmware\n
+    *ModFreq* = Sensor internal frequency\n"""
+    def __init__(self,TID=None,ModuleType=None,Firmware=None,ModFreq=None,serialn=None):
         self.TID = TID
-        self.Tserialn = Tserialn
-        self.TModuleType = TModuleType
-        self.TFirmware = TFirmware
-        self.TModFreq = TModFreq
-        self.TFtype = TFtype            #MicroFlu type 1 is Chl, 2 is blue, 3 is CDOM
-        self.TSMit = TSMit              #MicroFlu internal averaging
-        self.TCtlStart = TCtlStart      #MicroFlu started/active
-        self.TCtlAnalog = TCtlAnalog    #MicroFlu analog channel on
-        self.TCtlRange = TCtlRange      #MicroFlu 0 = high gain, 1 = low gain
-        self.TCtlAutoR = TCtlAutoR      #MicroFlu Autorange 1 on 0 off 
-        self.TCtlContn = TCtlContn      #MicroFlu Datastream 0 On Demand / 1 Continuous
-        self.TSAMspectrumframes = TSAMspectrumframes
-        self.TlastRawdata = TlastRawdata
-        self.TlastCaldata = TlastCaldata
-        self.TlastTimestampPC = TlastTimestampPC
-        self.TMaster = TMaster
+        self.ModuleType=ModuleType
+        self.Firmware = Firmware
+        self.ModFreq = ModFreq
+        self.serialn = serialn
+    def __repr__(self):
+        return ("<PyTrios Instrument, TID=%s, serialn=%s, ModuleType=%s, Firmware=%s>" %
+            (self.TID, self.serialn, self.ModuleType, self.Firmware))
+            
+class MFSettings(object):
+            """Microflu sensor specific settings\n
+            *Ftype*:     1/2/3 = Chl, blue, CDOM\n*Mit*: internal averaging\n
+            *CtlStart*: sensor is active\n*CtlAnalog*:analog output on\n
+            *CtlRange*: 0/1 = high/low gain\n*CtlAutoR*: 1/0 = Auto-range On/Off\n
+            *CtlContn*: 0/1 = On Demand / Continuous\n"""
+            def __init__(self, Ftype=None, SMit=None, 
+                         CtlStart=None, CtlAnalog=None,CtlRange=None,
+                         CtlAutoR=None, CtlContn=None): pass
 
-def TConnectCOM(port,timeout=0.01,baudrate=9600,xonxoff=True,parity='N',stopbits=1,bytesize=8):
-    """Create a serial object for a TriOS sensor on a COM port with default TriOS serial settings. \n\n *port* = *int* or *str* indicating COM port number, e.g. port=16, port=COM16, port='16' all work.\n"""
+class MFROMConfig(object):
+    """"IntAvg, Auto, Ampl, HighA_Offset, LowA_Offset, HighA_Scale, LowA_Scale"""
+    def __init__(self, IntAvg=None, Auto=None, Ampl=None,
+                 HighA_Offset=None, LowA_Offset=None, 
+                 HighA_Scale=None, LowA_Scale=None): pass
+
+class TMicroFlu(object):
+        """Stores data from connected MicroFlu instrument:\n
+        *Settings* = Sensor specific settings\n*ROMConfig* = Sensor startup configuration\n
+        *lastFluRaw* = last raw measurement (amplification, value)\n
+        *lastFluCal* = last calibrated measurement\n*lastFluTime* = local timestamp of last measurement\n"""
+        def __init__(self,Settings=MFSettings,ROMConfig=MFROMConfig,
+                     lastFluRaw=None,lastFluCal=None,lastFluTime=None):
+            self.Settings = Settings()
+            self.ROMConfig = ROMConfig()
+        def __repr__(self):
+            ftypes = ['','Chl','Blue','CDOM']
+            try:
+                return ("<PyTrios MicroFlu-%s, Averaging=%s, Continuous=%s, Autorange=%s, last measurement=%s: %s>" %
+                (ftypes[self.Settings.Ftype], self.Settings.Mit, self.Settings.CtlContn,\
+                self.Settings.CtlAutoR, self.lastFluTime, self.lastFluCal))
+            except: return str(None)
+
+class TChannel(object):
+    """Stores Trios Instrument info/data, identified by address (self.TID)"""
+    def __init__(self,TInfo=TInfo,TMicroFlu=TMicroFlu,TSAM=TSAM):
+        self.TInfo = TInfo()
+        self.TMicroFlu = TMicroFlu()
+        self.TSAM = TSAM()
+
+def TConnectCOM(port,timeout=0.01,baudrate=9600,xonxoff=True,parity='N',
+                stopbits=1,bytesize=8):
+    """Create a serial object for a TriOS sensor on a COM port with default 
+    TriOS serial settings. \n\n *port* = *int* or *str* indicating COM port 
+    number, e.g. port=16, port=COM16, port='16' all work.\n"""
     try:
         port = str(port)
         port = "COM"+port.capitalize().strip('COM')
@@ -126,28 +152,26 @@ def TMonitor(ports):
             ports = [ports]
         COMobjslst = []
         for p in ports:
-            ser = TConnectCOM(p,timeout=0.01,baudrate=9600, xonxoff=True, parity='N',stopbits=1,bytesize=8)
-            #ser.Tchannel = TChannel()
-            ser.TchannelDict={}                     #this will store TChannel objects
-            ser.threadlisten = threading.Thread(target=TListen, args=(ser,)) #associated port listening thread
-            ser.threadlive = threading.Event()      #clear to stop the thread (cannot be restarted once stopped)
-            ser.threadactive = threading.Event()    #clear to stop thread from polling port, does not stop the thread but you could remove the port object
-            ser.verbose = threading.Event()         #print more
-            ser.verbosehex = threading.Event()      #print hex packets
-            ser.threadlive.set()                    #intended as UI switch
-            ser.threadactive.set()                  #intended as UI switch
-            ser.verbose.clear()                     #intended as UI switch
-            ser.verbosehex.clear()                  #intended as UI switch
+            ser = TConnectCOM(p,timeout=0.01,baudrate=9600, xonxoff=True, 
+                              parity='N',stopbits=1,bytesize=8)
+            ser.Tchannels={}                 #stores TChannel objects
+            #associated port listening thread
+            ser.threadlisten = threading.Thread(target=TListen, args=(ser,)) 
+            ser.threadlive = threading.Event()  #clear stops thread permanently
+            ser.threadactive = threading.Event()#clear pauses thread
+            ser.verbose = threading.Event()     #print more info to console
+            ser.verbosehex = threading.Event()  #print hex packets
+            ser.threadlive.set()                #intended as UI switch
+            ser.threadactive.set()              #intended as UI switch
+            ser.verbose.clear()                 #intended as UI switch
+            ser.verbosehex.clear()              #intended as UI switch
             COMobjslst.append(ser)
-            ser.threadlisten.start()                #start thread
-            ser.threadlisten.join(0.01)             #join and return to calling thread
+            ser.threadlisten.start()            #start thread
+            ser.threadlisten.join(0.01)         #join calling thread
         return COMobjslst
     except:
-        for c in COMobjslst:
-            c.threadactive.clear()
-            c.threadlive.clear()
-            c.close()
-            print "General Exception caught. Attempted to close TMonitor threads and serial connections"
+        TClose(COMobjslst)
+        print "Uncaught exception. Threads and serial port(s) stopped."
         raise
 
 def TListen(ser):
@@ -159,33 +183,33 @@ def TListen(ser):
             try:
                 bitsatport = ser.inWaiting()
                 if bitsatport>0 or len(s)>0:
-                    s = s+ser.read(1000)                    # add new string to buffer
-                    first, last = s.find('#'), s.rfind('#') # look for start chars
-                    s = TStrRepl(s)                         # correct replacement chars
-                    if first > -1 and last >= first:        # at least one data packet found
-                        s = s[s.find('#',0):]               # cut any incomplete sequence away from start, it will not recur
-                        len_s = len(s)                      # start checking if a complete packet is present
-                        if len_s>1:                         # if one byte follows the # char, we know expected data size
+                    s = s+ser.read(1000)            # add string to buffer
+                    first, last = s.find('#'), s.rfind('#') # Find start chars
+                    s = TStrRepl(s)                 # correct replacement chars
+                    if first > -1 and last >= first:# at least 1 packet found
+                        s = s[s.find('#',0):]       # omit incomplete sequence
+                        len_s = len(s)              # check for complete packet 
+                        if len_s>1:                 # 1st byte after # = size
                             ndatabytes = 2*2**(ord(s[1]) >> 5)
-                            blocklength = 8+ndatabytes      #1xstart+2xID+1xModule+1xframebyte+2xtime+1xcheckbyte = 8 bytes
-                            if len_s>=blocklength:          #should form a complete packet
-                                s2parse = s[1:blocklength]  # the block to parse
+                            blocklength = 8+ndatabytes
+                            if len_s>=blocklength:  
+                                s2parse = s[1:blocklength]  # block to parse
                                 if ser.verbosehex.isSet():
                                     print "TListen:", ":".join("{0:x}".format(ord(c)) for c in s2parse)
-                                s = s[blocklength:]         # the remains to be used in the next cycle
-                                timeouttimer = 0            # reset timeout timer for incomplete packages
-                                packet = TSerial_parse(s2parse) #needs to be sent on to packet handler
+                                s = s[blocklength:] # remains go to next cycle
+                                timeouttimer = 0    # reset timeout timer
+                                packet = TSerial_parse(s2parse) #to handler
                                 if ser.verbose.isSet():
                                     print "TListen:", packet.TimeStampPC, packet.PacketType
                                 ser, packet = TPacketInterpreter(ser, packet)
-                            else: #there is an incomplete packet. At the timeout we flush it out of the buffer s to prevent it from holding up other packets
-                                if timeouttimer-time.time() > 1: #check an existing timer against timeout
+                            else: #incomplete packet -> check timeout timer
+                                if timeouttimer-time.time() > 1: 
                                     s="" #clear the buffer
                                     raise TProtocolError("Timeout when parsing serial buffer")
                                 else:
                                     if timeouttimer == 0:  #set a new timer
                                         timeouttimer = time.time()
-                time.sleep(0.05) # prevent process from taking over all CPU cycles
+                time.sleep(0.05) # pace this process 
             except TProtocolError as e:
                 print e.message, ser.port
                 pass
@@ -198,6 +222,8 @@ def TClose(COMs):
         COMs = [COMs]
     for c in COMs:
         try:
+            c.threadactive.clear()
+            c.threadlive.clear()
             c.close()
         except Exception:
             pass
@@ -244,7 +270,8 @@ def TSerial_parse(s2parse):
     except TProtocolError as e:
         print e.message
         print "TSerial_parse: Error while parsing Trios data packet. Info:"
-        print "TSerial_parse: Packet: ", ":".join("{0:x}".format(ord(c)) for c in s2parse) #string in pretty hex
+        prettyhex = ":".join("{0:x}".format(ord(c)) for c in s2parse) #string in pretty hex        
+        print "TSerial_parse: Packet: ", prettyhex
         return packet
         pass    
     except Exception: #any uncaught error
@@ -252,21 +279,20 @@ def TSerial_parse(s2parse):
         raise
 
 def TPacketInterpreter(ser, packet):
-    """Interpret Trios data packet according to source instrument communication standards"""
+    """Interpret Trios data packet according to source instrument communication standards. All information is stored in a dictionary where key, value  = instrument serial number, TChannel"""
     try:
         if packet.ModuleID == 164: #MicroFlu configuration package (address A4)
             print "Interpreter: received MicroFlu configuration on", ser.port
             packet.PacketType = 'config'
             try:
                 TID = hex(packet.id1_id)[2:].zfill(2) + hex(packet.id2)[2:].zfill(2)+"00"
-                ser.TchannelDict[TID].config = packet
-                ser.TchannelDict[TID].config.ROMIntAvg = packet.Databytes[3]
-                ser.TchannelDict[TID].config.ROMAuto = (packet.Databytes[4] & 0b00001000)>>3  #1 is Start measuring on startup
-                ser.TchannelDict[TID].config.ROMAmpl = packet.Databytes[4]>>4                 #0/1/2 = high/auto/low
-                ser.TchannelDict[TID].config.ROMHighA_Offset = np.float(packet.Databytes[5]*256 + packet.Databytes[6])
-                ser.TchannelDict[TID].config.ROMLowA_Offset =  np.float(packet.Databytes[7]*256 + packet.Databytes[8])
-                ser.TchannelDict[TID].config.ROMHighA_Scale = np.float(packet.Databytes[9]) + np.float(packet.Databytes[10])/256
-                ser.TchannelDict[TID].config.ROMLowA_Scale = np.float(packet.Databytes[11]) + np.float(packet.Databytes[12])/256
+                ser.Tchannels[TID].TMicroFlu.ROMConfig.IntAvg = packet.Databytes[3]
+                ser.Tchannels[TID].TMicroFlu.ROMConfig.Auto = (packet.Databytes[4] & 0b00001000)>>3  #1 is Start measuring on startup
+                ser.Tchannels[TID].TMicroFlu.ROMConfig.Ampl = packet.Databytes[4]>>4                 #0/1/2 = high/auto/low
+                ser.Tchannels[TID].TMicroFlu.ROMConfig.HighA_Offset = np.float(packet.Databytes[5]*256 + packet.Databytes[6])
+                ser.Tchannels[TID].TMicroFlu.ROMConfig.LowA_Offset =  np.float(packet.Databytes[7]*256 + packet.Databytes[8])
+                ser.Tchannels[TID].TMicroFlu.ROMConfig.HighA_Scale = np.float(packet.Databytes[9]) + np.float(packet.Databytes[10])/256
+                ser.Tchannels[TID].TMicroFlu.ROMConfig.LowA_Scale = np.float(packet.Databytes[11]) + np.float(packet.Databytes[12])/256
                 return ser, packet
             except:
                 print "Interpreter: error interpreting config package"
@@ -275,74 +301,104 @@ def TPacketInterpreter(ser, packet):
             serlow = packet.Databytes[0]        # in serial number ### this is the last 2 hex chars
             serhi = packet.Databytes[1]         # in serial number #### this is the first 2 hex chars
             vals,types = [2,4,8,9,10,12,16,20,24], ['MicroFlu','IOM','COM','IPS','SAMIP','SCM','SAM','DFM','ADM']
-            #thisTchannel = TChannel(TID = str(packet.id1_id).zfill(2) + str(packet.id2).zfill(2)+str(packet.ModuleID).zfill(2))
-            thisTchannel = TChannel(TID = hex(packet.id1_id)[2:].zfill(2) + hex(packet.id2)[2:].zfill(2)+hex(packet.ModuleID)[2:].zfill(2))
-            thisTchannel.Tserialn = str.upper(hex(serhi)[-2::]+hex(serlow)[-2::]) #serial as quoted on instrument
-            thisTchannel.TModuleType = types[vals.index(serhi>>3)]                # module type from 5 most sign Bits
-            thisTchannel.TFirmware = packet.Databytes[3]+0.01*packet.Databytes[2]
-            thisTchannel.TModFreq = [np.nan,2,4,6,8,10,12,20][packet.Databytes[4]]#operating freq. in MHz
-            if thisTchannel.TModuleType is 'MicroFlu':
-                thisTchannel.TFtype = packet.Databytes[5]                         #1 = chl; 2 = blue, 3 is CDOM
-                thisTchannel.TSMit = packet.Databytes[6]                          #Internal averaging n samples
-                thisTchannel.TCtlStart = (packet.Databytes[7] & 0b10000000)>>7    #bit 7 = sampling is active
-                thisTchannel.TCtlAnalog = (packet.Databytes[7] & 0b01000000)>>6   #bit 6 Analog Power (0=OFF, 1=ON)
-                thisTchannel.TCtlRange = (packet.Databytes[7] & 0b00100000)>>5    #Bit 5: Range (0= highAmp, 1= lowAmp)
-                thisTchannel.TCtlAutoR = (packet.Databytes[7] & 0b00010000)>>4    #Bit 4: AutoRange (0= OFF, 1= ON)
-                thisTchannel.TCtlContn = (packet.Databytes[7] & 0b00001000)>>3    #Bit 3: Datastream (0= OnDemand, 1= Continously)
-                #a query command on a MicroFlu can be followed by a ROM Config request for more sensor info
-                TCommandSend(ser,commandset='MicroFlu',ipschan=thisTchannel.TID[0:2],command='ReadCfg')
-                #after config request reset the sensor to previous sampling state
-                if thisTchannel.TCtlContn == 0:
-                    TCommandSend(ser,commandset='MicroFlu',ipschan=thisTchannel.TID[0:2],command='cont_off')
-                else:
-                    TCommandSend(ser,commandset='MicroFlu',ipschan=thisTchannel.TID[0:2],command='cont_on')
-            print "Interpreter:", packet.TimeStampPC, "Query result from", thisTchannel.TModuleType, "on", ser.port, hex(packet.id1_id), hex(packet.id2), hex(packet.ModuleID), thisTchannel.Tserialn, thisTchannel.TModuleType
-            if thisTchannel.TModuleType in['SAM','SAMIP']:
-                thisTchannel.SAMConfiguration = packet.Databytes[5]
-                thisTchannel.SAMRange = packet.Databytes[6]
-                thisTchannel.SAMStatus = packet.Databytes[7]
-            ser.TchannelDict[thisTchannel.TID]=thisTchannel
-            if thisTchannel.TModuleType is 'IPS':
+            thisTchannel = TChannel()
+            tid1 = hex(packet.id1_id)[2:].zfill(2)
+            tid2 = hex(packet.id2)[2:].zfill(2)
+            tid3 = hex(packet.ModuleID)[2:].zfill(2)
+            thisTchannel.TInfo.TID = tid1+tid2+tid3
+            thisTchannel.TInfo.serialn = str.upper(hex(serhi)[-2::]+hex(serlow)[-2::]) #serial as quoted on instrument
+            thisTchannel.TInfo.ModuleType = types[vals.index(serhi>>3)]                # module type from 5 most sign Bits
+            thisTchannel.TInfo.Firmware = packet.Databytes[3]+0.01*packet.Databytes[2]
+            thisTchannel.TInfo.ModFreq = [np.nan,2,4,6,8,10,12,20][packet.Databytes[4]]#operating freq. in MHz
+            if thisTchannel.TInfo.ModuleType is 'IPS':
                 for c in ['02','04','06','08']:
                     TCommandSend(ser,commandset=None,ipschan=c,command='query') #query submodule information
+            if thisTchannel.TInfo.ModuleType is 'MicroFlu':
+                thisTchannel.TMicroFlu.Settings.Ftype = packet.Databytes[5]                         #1 = chl; 2 = blue, 3 is CDOM
+                thisTchannel.TMicroFlu.Settings.SMit = packet.Databytes[6]                          #Internal averaging n samples
+                thisTchannel.TMicroFlu.Settings.CtlStart = (packet.Databytes[7] & 0b10000000)>>7    #bit 7 = sampling is active
+                thisTchannel.TMicroFlu.Settings.CtlAnalog = (packet.Databytes[7] & 0b01000000)>>6   #bit 6 Analog Power (0=OFF, 1=ON)
+                thisTchannel.TMicroFlu.Settings.CtlRange = (packet.Databytes[7] & 0b00100000)>>5    #Bit 5: Range (0= highAmp, 1= lowAmp)
+                thisTchannel.TMicroFlu.Settings.CtlAutoR = (packet.Databytes[7] & 0b00010000)>>4    #Bit 4: AutoRange (0= OFF, 1= ON)
+                thisTchannel.TMicroFlu.Settings.CtlContn = (packet.Databytes[7] & 0b00001000)>>3    #Bit 3: Datastream (0= OnDemand, 1= Continously)
+                #a query command on a MicroFlu can be followed by a ROM Config request for more sensor info
+                TCommandSend(ser,commandset='MicroFlu',ipschan=thisTchannel.TInfo.TID[0:2],command='ReadCfg')
+                #after config request reset the sensor to previous sampling state
+                if thisTchannel.TMicroFlu.Settings.CtlContn == 0:
+                    TCommandSend(ser,commandset='MicroFlu',\
+                        ipschan=thisTchannel.TInfo.TID[0:2],command='cont_off')
+                else:
+                    TCommandSend(ser,commandset='MicroFlu',\
+                        ipschan=thisTchannel.TInfo.TID[0:2],command='cont_on')
+            if thisTchannel.TInfo.ModuleType in['SAM','SAMIP']:
+                thisTchannel.TSAM.Settings.SAMConfiguration = packet.Databytes[5]
+                thisTchannel.TSAM.Settings.SAMRange = packet.Databytes[6]
+                thisTchannel.TSAM.Settings.SAMStatus = packet.Databytes[7]
+            ser.Tchannels[thisTchannel.TInfo.TID]=thisTchannel
+            print "Interpreter:", packet.TimeStampPC, "Query result from",\
+                thisTchannel.TInfo.ModuleType, "on", ser.port, hex(packet.id1_id),\
+                hex(packet.id2), hex(packet.ModuleID), thisTchannel.TInfo.serialn,\
+                thisTchannel.TInfo.ModuleType
         if packet.PacketType is 'measurement':
-            TID = hex(packet.id1_id)[2:].zfill(2) + hex(packet.id2)[2:].zfill(2)+hex(packet.ModuleID)[2:].zfill(2)
+            tid1 = hex(packet.id1_id)[2:].zfill(2)
+            tid2 = hex(packet.id2)[2:].zfill(2)
+            tid3 = hex(packet.ModuleID)[2:].zfill(2)
+            TID = tid1+tid2+tid3
+            interpreter = ''
+            if int(tid3) == 0:
+                if ser.Tchannels[TID].TInfo.ModuleType in['SAM','SAMIP']:
+                    interpreter = 'SAM'
+                if ser.Tchannels[TID].TInfo.ModuleType is 'MicroFlu':
+                    interpreter='MicroFlu'
+            if int(tid3) == 20 and ser.Tchannels[tid1+tid2+'80'].TInfo.ModuleType is 'SAMIP':
+                TID = tid1+tid2+'80'
+                interpreter='ADM'
+            if int(tid3) == 30 and ser.Tchannels[tid1+tid2+'80'].TInfo.ModuleType is 'SAMIP':
+                TID = tid1+tid2+'80'
+                interpreter='SAM'
             if ser.verbose.isSet():
-                print "Interpreter:",packet.TimeStampPC, "Measurement on",ser.port,", Address",TID,", Type",ser.TchannelDict[TID].TModuleType
-            if ser.TchannelDict[TID].TModuleType is 'MicroFlu':
+                print "Interpreter:",packet.TimeStampPC, "type: ",interpreter,\
+                    "measurement on",ser.port,", Address",TID
+            if interpreter is 'ADM':
+                if ser.verbose.isSet():
+                    print "Interpreter: ADM measurement (not implemented),\
+                        address", TID, packet.id1_databytes,"bytes, \
+                        Instrument:",ser.Tchannels[TID].TInfo.serialn
+            if interpreter is 'SAM':
+                if ser.verbose.isSet():
+                    print "Interpreter: SAM frame:", packet.Framebyte, "with",\
+                        packet.id1_databytes, " databytes on Module:",\
+                        ser.Tchannels[TID].TInfo.serialn
+                formatstring = '<'+'H'*int(packet.id1_databytes/2)
+                rawdata = ''.join([chr(y) for y in packet.Databytes])
+                LEdata = struct.unpack(formatstring,rawdata)
+                ser.Tchannels[TID].TSAM.dataframes[packet.Framebyte]=LEdata
+                if packet.Framebyte == 0:
+                    frames = ser.Tchannels[TID].TSAM.dataframes
+                    if sum(y is None for y in frames)==0:
+                        ser.Tchannels[TID].TSAM.lastRawSAM = [item for sublist in frames for item in sublist]
+                        ser.Tchannels[TID].TSAM.lastRawSAMTime = packet.TimeStampPC
+                        print "Interpreter: Spectrum received at", ser.port, "address (master)",ser.Tchannels[TID].TInfo.TID, "module",ser.Tchannels[TID].TInfo.serialn
+                    else:
+                        print "Interpreter: Incomplete spectrum received and discarded"
+                        raise TProtocolError("Interpreter: Incomplete spectrum received and discarded")
+                    ser.Tchannels[TID].TSAM.dataframes=[[None]]*8 #reset to receive the next spectrum
+            if interpreter is 'MicroFlu':
                 formatstring = '>'+'H'*int(packet.id1_databytes/2) #byteorder is big endian although documentation suggests different
                 BEdata = struct.unpack(formatstring,''.join([chr(y) for y in packet.Databytes]))
                 gain = BEdata[0] >> 15  #0 means high gain, 1 means low gain
                 data = BEdata[0] & 0b111111111111
-                ser.TchannelDict[TID].TlastRawdata = [gain,data]
-                ser.TchannelDict[TID].TlastTimestampPC = packet.TimeStampPC
+                ser.Tchannels[TID].TMicroFlu.lastFluRaw = [gain,data]
+                ser.Tchannels[TID].TMicroFlu.lastFluTime = packet.TimeStampPC
                 if gain == 1:
-                    ser.TchannelDict[TID].TlastCaldata = 100*data/np.float(2048)
+                    ser.Tchannels[TID].TMicroFlu.lastFluCal= 100*data/np.float(2048)
                 if gain == 0:
-                    ser.TchannelDict[TID].TlastCaldata = 10*data/np.float(2048)
+                    ser.Tchannels[TID].TMicroFlu.lastFluCal= 10*data/np.float(2048)
                 if ser.verbose.isSet():
                     gains,ftypes = ['H','L'], [None,'Chl','Blue','CDOM']
-                    print "Interpreter: Microflu-"+ftypes[ser.TchannelDict[TID].TFtype]+" data from", ser.port, "Gain:",gain,"("+gains[gain]+")","Raw Value:",data, "Cal. value:",ser.TchannelDict[TID].TlastCaldata
-            if ser.TchannelDict[TID].TModuleType is 'SAM':
-                if ser.verbose.isSet():
-                    print "Interpreter: SAM frame:", packet.Framebyte, "with", packet.id1_databytes, " databytes on Module:",ser.TchannelDict[TID].Tserialn
-                formatstring = '<'+'H'*int(packet.id1_databytes/2)
-                LEdata = struct.unpack(formatstring,''.join([chr(y) for y in packet.Databytes]))
-                ser.TchannelDict[TID].TSAMspectrumframes[packet.Framebyte]=LEdata
-                if packet.Framebyte == 0:
-                    frames = ser.TchannelDict[TID].TSAMspectrumframes
-                    if sum(y is None for y in frames)==0:
-                        ser.TchannelDict[TID].TlastRawdata = [item for sublist in frames for item in sublist]
-                        ser.TchannelDict[TID].TlastTimestampPC = packet.TimeStampPC
-                        if int(ser.TchannelDict[TID].TID[-2:])>0: #is a module in another instrument
-                            ser.TchannelDict[TID].TMaster = ser.TchannelDict[ser.TchannelDict[TID].TID[0:4]+'80'].Tserialn
-                        print "Interpreter: Spectrum received at", ser.port, "address",ser.TchannelDict[TID].TID, "module",ser.TchannelDict[TID].Tserialn
-                    else:
-                        print "Interpreter: Incomplete spectrum received and discarded"
-                        raise TProtocolError("Interpreter: Incomplete spectrum received and discarded")
-                    ser.TchannelDict[TID].TSAMspectrumframes=[[None]]*8 #reset to receive the next spectrum
-            if ser.TchannelDict[TID].TModuleType is 'ADM':
-                print "Interpreter: ADM measurement received (not implemented) address", TID, packet.id1_databytes,"bytes, Module:",ser.TchannelDict[TID].Tserialn, ", Instrument:",ser.TchannelDict['000080'].Tserialn
+                    print "Interpreter: Microflu-",ftypes[ser.Tchannels[TID].TMicroFlu.Settings.Ftype],\
+                    " data from", ser.port, "Gain:",gain,"("+gains[gain]+")",\
+                    "Raw Value:",data, "Cal. value:",ser.Tchannels[TID].TMicroFlu.lastFluCal
         return ser, packet
     except TProtocolError as e:
         print e.message
@@ -364,7 +420,7 @@ def TStrRepl(s):
     s = s.replace('@d','\x40')  # correct for escape chars (escape char @)
     return s
 
-def TCommandSend(ser,commandset,command='query', ipschan='00', par1='00',par2='00'):
+def TCommandSend(ser,commandset,command='query', ipschan='00', par1='00'):
     """send a command from a module specific command set to a TriOS device.\n
     Device reconfiguration is not supported.\n
 
@@ -373,9 +429,12 @@ def TCommandSend(ser,commandset,command='query', ipschan='00', par1='00',par2='0
         *MicroFlu*  e.g. TCommandSend(ser,'MicroFlu',command='cont_off')
         *SAM*       e.g. TCommandSend(ser,'SAM',command='startIntAuto')
 
+        The reboot command has been disabled for now, until it is better understood:\n
+        SAM: 'reboot'      : bytearray.fromhex("23 "+str(ipschan)+" 00 80 00 00 00 01")\n
+        Micrflu: 'reboot'     : bytearray.fromhex("23 "+str(ipschan)+" 00 00 00 00 00 01")\n
+        
     For sensors on an IPS4 box, specify the channel as *ipschan* = '02','04','06','08' for channels 1-4 respectively.\n\n
     *par1* is the first user-configurable parameter mentioned in the documentation, even when listed as parameter2 in the docs. Most commands require only one argument.\n\n
-    *par2* is only included for future use but not referenced in the current command set.
     """
     #TODO escape the control characters if they should occur in any command?
     commandsetdict = {None:0,'MicroFlu':1,'SAM':2,}
@@ -386,7 +445,6 @@ def TCommandSend(ser,commandset,command='query', ipschan='00', par1='00',par2='0
         'cont_on'    : bytearray.fromhex("23 "+str(ipschan)+" 00 00 78 0f 01 01"),\
         'cont_off'   : bytearray.fromhex("23 "+str(ipschan)+" 00 00 78 0f 00 01"),\
         'query'      : bytearray.fromhex("23 "+str(ipschan)+" 00 00 B0 00 00 01"),\
-        'reboot'     : bytearray.fromhex("23 "+str(ipschan)+" 00 00 00 00 00 01"),\
         'start'      : bytearray.fromhex("23 "+str(ipschan)+" 00 00 A8 00 81 01"),\
         'stop'       : bytearray.fromhex("23 "+str(ipschan)+" 00 00 A8 00 82 01"),\
         'autoamp_on' : bytearray.fromhex("23 "+str(ipschan)+" 00 00 78 06 01 01"),\
@@ -397,7 +455,6 @@ def TCommandSend(ser,commandset,command='query', ipschan='00', par1='00',par2='0
         }
     #SAM address is 80, SAMIP has main address 80, but address 20 for IP and 30 for SAM specific commands
     commanddict[2] = {\
-        'reboot'      : bytearray.fromhex("23 "+str(ipschan)+" 00 80 00 00 00 01"),\
         'startIntAuto': bytearray.fromhex("23 "+str(ipschan)+" 00 30 78 05 00 01 23 "+str(ipschan)+" 00 80 A8 00 81 01"),\
         'startIntSet' : bytearray.fromhex("23 "+str(ipschan)+" 00 30 78 05 "+str(par1)+" 01 23 "+str(ipschan)+" 00 80 A8 00 81 01"),\
         'cont_mode_off': bytearray.fromhex("23 "+str(ipschan)+" 00 30 78 F0 02 01"),\

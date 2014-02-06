@@ -1,0 +1,21 @@
+Change log for PyTrios
+
+check version by calling
+>import PyTrios as ps
+>ps.__version__
+
+changed in version 20140203:
+- Refactoring and code cleanup. Some external changes, too:
+- TClose now closes any open threads before closing COM ports
+- TchannelDict is now called Tchannels
+- Instrument equipped with multiple modules (SAMIP) report results back on the address of the master module, this should prevent any trouble with SAMIP sensor modules not identifying themselves after a 'warm' start.
+- Tchannel class changed and now holds subclasses TSAM, TMicroFlu, and TInfo, allowing easier browsing.
+- new subclasses TSAM and TMicroFlu contain sensor-specific configuration in their own Settings subclasses. 
+- Most important external changes of the refactoring steps:
+	- Tchannel[address].TInfo.serialn = sensor serial number
+	- Tchannel[address].TInfo.ModuleType = type of (master) instrument, e.g. MicroFlu, SAM, or SAMIP
+	- Tchannel[address].TSAM.lastRawSAM and lastRawSAMTime hold the last spectrum and timestamp
+	- Tchannel[address].TMicroFlu.Settings.Ftype is the type of MicroFlu sensor (1 Chl, 2 Blue, 3 CDOM)
+	- Tchannel[address].TMicroFlu.lastFluRaw, lastFluCal, and lastFluTime hold latest MicroFlu data
+	- Tchannel[address].TInfo, Tchannel[address].TMicroFlu, and Tchannel[address].TSAM can be called directly for basic sensor
+
