@@ -3,7 +3,7 @@
 @author: Stefan Simis, Finnish Environment Institute SYKE 2014. Email firstname.lastname[_at_]environment.fi
 Examples to illustrate the use of the PyTrios library.
 
-updated 2014/02/06
+updated 2014/02/18
 """
 
 import PyTrios as ps
@@ -18,6 +18,8 @@ ps.TCommandSend(coms[0],commandset=None,command='query')
 coms[0].threadactive.clear()
 #set flag to continue monitoring:
 coms[0].threadactive.set()
+#Control the verbosity setting to display incoming measurements:
+coms[0].verbosity = 2 #0/1/2/3 = none, queries(default), measurements, all
 #close the listening threads and com ports 
 ps.TClose(coms) 
 
@@ -57,10 +59,9 @@ ps.TCommandSend(coms[0],ipschan='06',commandset='MicroFlu',command='autoamp_on')
 ps.TCommandSend(coms[0],ipschan='06',commandset='MicroFlu',command='cont_on')  #stop continuous measurement
 ps.TCommandSend(coms[0],ipschan='06',commandset='MicroFlu',command='start')     #start one measurement
 
-#Most MicroFlu sensors are configured to send data continuously on startup. 
-#Set the verbose flag to display incoming measurements:
-coms[0].verbose.set()
-coms[0].verbose.clear() #to go silent again.
+#Most MicroFlu sensors are configured to send data continuously on startup.
+#Control the verbosity setting to display incoming measurements:
+coms[0].verbosity = 2 #0/1/2/3 = none, queries(default), measurements, all
 
 #some more commands
 ps.TCommandSend(coms[0],ipschan='06',commandset='MicroFlu',command='autoamp_on')             #

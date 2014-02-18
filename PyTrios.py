@@ -32,7 +32,7 @@ import struct
 import numpy as np
 import threading
 
-__version__ = "2014.02.04"
+__version__ = "2014.02.18"
 
 class TProtocolError(Exception):
     def __init__(self, value):
@@ -159,12 +159,9 @@ def TMonitor(ports):
             ser.threadlisten = threading.Thread(target=TListen, args=(ser,)) 
             ser.threadlive = threading.Event()  #clear stops thread permanently
             ser.threadactive = threading.Event()#clear pauses thread
-            ser.verbose = threading.Event()     #print more info to console
-            ser.verbosehex = threading.Event()  #print hex packets
+            ser.verbosity = 1                   #UI switch. 0/1/2/3 = none, queries(default), measurements, all
             ser.threadlive.set()                #intended as UI switch
             ser.threadactive.set()              #intended as UI switch
-            ser.verbose.clear()                 #intended as UI switch
-            ser.verbosehex.clear()              #intended as UI switch
             COMobjslst.append(ser)
             ser.threadlisten.start()            #start thread
             ser.threadlisten.join(0.01)         #join calling thread
@@ -194,12 +191,12 @@ def TListen(ser):
                             blocklength = 8+ndatabytes
                             if len_s>=blocklength:  
                                 s2parse = s[1:blocklength]  # block to parse
-                                if ser.verbosehex.isSet():
+                                if ser.verbosity>2:
                                     print "TListen:", ":".join("{0:x}".format(ord(c)) for c in s2parse)
                                 s = s[blocklength:] # remains go to next cycle
                                 timeouttimer = 0    # reset timeout timer
                                 packet = TSerial_parse(s2parse) #to handler
-                                if ser.verbose.isSet():
+                                if ser.verbosity>2:
                                     print "TListen:", packet.TimeStampPC, packet.PacketType
                                 ser, packet = TPacketInterpreter(ser, packet)
                             else: #incomplete packet -> check timeout timer
@@ -282,8 +279,9 @@ def TPacketInterpreter(ser, packet):
     """Interpret Trios data packet according to source instrument communication standards. All information is stored in a dictionary where key, value  = instrument serial number, TChannel"""
     try:
         if packet.ModuleID == 164: #MicroFlu configuration package (address A4)
-            print "Interpreter: received MicroFlu configuration on", ser.port
             packet.PacketType = 'config'
+            if ser.verbosity>0:
+                print "Interpreter: received MicroFlu configuration on", ser.port
             try:
                 TID = hex(packet.id1_id)[2:].zfill(2) + hex(packet.id2)[2:].zfill(2)+"00"
                 ser.Tchannels[TID].TMicroFlu.ROMConfig.IntAvg = packet.Databytes[3]
@@ -335,10 +333,11 @@ def TPacketInterpreter(ser, packet):
                 thisTchannel.TSAM.Settings.SAMRange = packet.Databytes[6]
                 thisTchannel.TSAM.Settings.SAMStatus = packet.Databytes[7]
             ser.Tchannels[thisTchannel.TInfo.TID]=thisTchannel
-            print "Interpreter:", packet.TimeStampPC, "Query result from",\
-                thisTchannel.TInfo.ModuleType, "on", ser.port, hex(packet.id1_id),\
-                hex(packet.id2), hex(packet.ModuleID), thisTchannel.TInfo.serialn,\
-                thisTchannel.TInfo.ModuleType
+            if ser.verbosity>1:
+                print "Interpreter:", packet.TimeStampPC, "Query result from",\
+                    thisTchannel.TInfo.ModuleType, "on", ser.port, hex(packet.id1_id),\
+                    hex(packet.id2), hex(packet.ModuleID), thisTchannel.TInfo.serialn,\
+                    thisTchannel.TInfo.ModuleType
         if packet.PacketType is 'measurement':
             tid1 = hex(packet.id1_id)[2:].zfill(2)
             tid2 = hex(packet.id2)[2:].zfill(2)
@@ -356,16 +355,16 @@ def TPacketInterpreter(ser, packet):
             if int(tid3) == 30 and ser.Tchannels[tid1+tid2+'80'].TInfo.ModuleType is 'SAMIP':
                 TID = tid1+tid2+'80'
                 interpreter='SAM'
-            if ser.verbose.isSet():
+            if ser.verbosity>1:
                 print "Interpreter:",packet.TimeStampPC, "type: ",interpreter,\
                     "measurement on",ser.port,", Address",TID
             if interpreter is 'ADM':
-                if ser.verbose.isSet():
+                if ser.verbosity>1:
                     print "Interpreter: ADM measurement (not implemented),\
                         address", TID, packet.id1_databytes,"bytes, \
                         Instrument:",ser.Tchannels[TID].TInfo.serialn
             if interpreter is 'SAM':
-                if ser.verbose.isSet():
+                if ser.verbosity>1:
                     print "Interpreter: SAM frame:", packet.Framebyte, "with",\
                         packet.id1_databytes, " databytes on Module:",\
                         ser.Tchannels[TID].TInfo.serialn
@@ -378,9 +377,11 @@ def TPacketInterpreter(ser, packet):
                     if sum(y is None for y in frames)==0:
                         ser.Tchannels[TID].TSAM.lastRawSAM = [item for sublist in frames for item in sublist]
                         ser.Tchannels[TID].TSAM.lastRawSAMTime = packet.TimeStampPC
-                        print "Interpreter: Spectrum received at", ser.port, "address (master)",ser.Tchannels[TID].TInfo.TID, "module",ser.Tchannels[TID].TInfo.serialn
+                        if ser.verbosity>1:
+                            print "Interpreter: Spectrum received at", ser.port, "address (master)",ser.Tchannels[TID].TInfo.TID, "module",ser.Tchannels[TID].TInfo.serialn
                     else:
-                        print "Interpreter: Incomplete spectrum received and discarded"
+                        if ser.verbosity>1:
+                            print "Interpreter: Incomplete spectrum received and discarded"
                         raise TProtocolError("Interpreter: Incomplete spectrum received and discarded")
                     ser.Tchannels[TID].TSAM.dataframes=[[None]]*8 #reset to receive the next spectrum
             if interpreter is 'MicroFlu':
@@ -394,7 +395,7 @@ def TPacketInterpreter(ser, packet):
                     ser.Tchannels[TID].TMicroFlu.lastFluCal= 100*data/np.float(2048)
                 if gain == 0:
                     ser.Tchannels[TID].TMicroFlu.lastFluCal= 10*data/np.float(2048)
-                if ser.verbose.isSet():
+                if ser.verbosity>1:
                     gains,ftypes = ['H','L'], [None,'Chl','Blue','CDOM']
                     print "Interpreter: Microflu-",ftypes[ser.Tchannels[TID].TMicroFlu.Settings.Ftype],\
                     " data from", ser.port, "Gain:",gain,"("+gains[gain]+")",\

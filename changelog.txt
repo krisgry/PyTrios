@@ -4,7 +4,19 @@ check version by calling
 >import PyTrios as ps
 >ps.__version__
 
-changed in version 20140203:
+
+
+
+
+changed in version 2014.02.18:
+- removed thread.event 'verbose' and 'verbosehex' and replaced with 'verbosity' which can be set to a value of 0 to 3:
+	0 = only errors
+	1 = errors + query results
+	2 = errors + queries + measurements
+	3 = errors + queries + measurements + package info (hex strings)
+See updated PyTrios_Examples on how to change this setting.
+
+changed in version 2014.02.04:
 - Refactoring and code cleanup. Some external changes, too:
 - TClose now closes any open threads before closing COM ports
 - TchannelDict is now called Tchannels
