@@ -21,7 +21,7 @@ Email firstname.lastname[_at_]environment.fi
 Note: PyTrios builds on the *serial* module by Chris Liechti
 
 Tested on Python 2.7.3\n
-Last update 16 Jan 2014\n
+Last update: see __version__\n
 
 *For example use please see the enclosed PyTrios_Examples.py script.*
 """
@@ -32,7 +32,7 @@ import struct
 import numpy as np
 import threading
 
-__version__ = "2014.02.18"
+__version__ = "2014.03.11"
 
 class TProtocolError(Exception):
     def __init__(self, value):
@@ -349,12 +349,14 @@ def TPacketInterpreter(ser, packet):
                     interpreter = 'SAM'
                 if ser.Tchannels[TID].TInfo.ModuleType is 'MicroFlu':
                     interpreter='MicroFlu'
-            if int(tid3) == 20 and ser.Tchannels[tid1+tid2+'80'].TInfo.ModuleType is 'SAMIP':
-                TID = tid1+tid2+'80'
-                interpreter='ADM'
-            if int(tid3) == 30 and ser.Tchannels[tid1+tid2+'80'].TInfo.ModuleType is 'SAMIP':
-                TID = tid1+tid2+'80'
-                interpreter='SAM'
+            if int(tid3) == 20:
+                if ser.Tchannels[tid1+tid2+'80'].TInfo.ModuleType in ['COM','SAMIP']:
+                    TID = tid1+tid2+'80'
+                    interpreter='ADM'
+            if int(tid3) == 30:
+                if ser.Tchannels[tid1+tid2+'80'].TInfo.ModuleType in ['COM','SAMIP']:
+                    TID = tid1+tid2+'80'
+                    interpreter='SAM'
             if ser.verbosity>1:
                 print "Interpreter:",packet.TimeStampPC, "type: ",interpreter,\
                     "measurement on",ser.port,", Address",TID
