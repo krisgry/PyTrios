@@ -32,7 +32,7 @@ import struct
 import numpy as np
 import threading
 
-__version__ = "2014.03.11"
+__version__ = "2014.04.08"
 
 class TProtocolError(Exception):
     def __init__(self, value):
@@ -195,10 +195,13 @@ def TListen(ser):
                                     print "TListen:", ":".join("{0:x}".format(ord(c)) for c in s2parse)
                                 s = s[blocklength:] # remains go to next cycle
                                 timeouttimer = 0    # reset timeout timer
-                                packet = TSerial_parse(s2parse) #to handler
-                                if ser.verbosity>2:
-                                    print "TListen:", packet.TimeStampPC, packet.PacketType
-                                ser, packet = TPacketInterpreter(ser, packet)
+                                packet = TSerial_parse(s2parse) #to handler, return None on error
+                                if packet:
+                                    if ser.verbosity>2:
+                                        print "TListen:", packet.TimeStampPC, packet.PacketType
+                                    ser, packet = TPacketInterpreter(ser, packet)
+                                else: 
+                                    print "TListen: bad packet on port", ser.port
                             else: #incomplete packet -> check timeout timer
                                 if timeouttimer-time.time() > 1: 
                                     s="" #clear the buffer
@@ -269,10 +272,10 @@ def TSerial_parse(s2parse):
         print "TSerial_parse: Error while parsing Trios data packet. Info:"
         prettyhex = ":".join("{0:x}".format(ord(c)) for c in s2parse) #string in pretty hex        
         print "TSerial_parse: Packet: ", prettyhex
-        return packet
+        return None
         pass    
     except Exception: #any uncaught error
-        return packet
+        return None
         raise
 
 def TPacketInterpreter(ser, packet):
@@ -377,7 +380,12 @@ def TPacketInterpreter(ser, packet):
                 if packet.Framebyte == 0:
                     frames = ser.Tchannels[TID].TSAM.dataframes
                     if sum(y is None for y in frames)==0:
-                        ser.Tchannels[TID].TSAM.lastRawSAM = [item for sublist in frames for item in sublist]
+                        outspec = []                        
+                        for sublist in frames:
+                            sl = list(sublist)
+                            sl.reverse()
+                            outspec=outspec+sl
+                        ser.Tchannels[TID].TSAM.lastRawSAM = outspec
                         ser.Tchannels[TID].TSAM.lastRawSAMTime = packet.TimeStampPC
                         if ser.verbosity>1:
                             print "Interpreter: Spectrum received at", ser.port, "address (master)",ser.Tchannels[TID].TInfo.TID, "module",ser.Tchannels[TID].TInfo.serialn
