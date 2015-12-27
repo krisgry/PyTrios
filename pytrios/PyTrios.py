@@ -103,6 +103,14 @@ def handlePacket(ser, packet):
         port_tid = ser.port + '_' + p.TID
         interpreter = ''
         try:
+            ch = tchannels[port_tid]
+        except KeyError:
+            if ser.verbosity >= 1:
+                emsg = "handlePacket (measurement):" +\
+                    " invalid address: {0}".format(port_tid)
+                raise Warning(emsg)
+                return
+        try:
             if int(p.tid3) == 0:
                 if tchannels[port_tid].TInfo.ModuleType in['SAM', 'SAMIP']:
                     interpreter = 'SAM'

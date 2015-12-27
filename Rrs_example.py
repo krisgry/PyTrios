@@ -58,9 +58,9 @@ def run(args):
         for s in sams:
             lasttrigger = datetime.datetime.now()
             # trigger single measurement at auto integration time
-            tc[s].startIntAuto(coms[0], trigger=lasttrigger)
+            # tc[s].startIntAuto(coms[0], trigger=lasttrigger)
             # trigger single measurement at fixed integration time
-            # tc[s].startIntSet(coms[0], 64, trigger=lasttrigger)
+            tc[s].startIntSet(coms[0], 128, trigger=lasttrigger)
 
         # follow progress
         npending = len(sams)
@@ -108,11 +108,11 @@ if __name__ == '__main__':
                                                      ps.__license__)
     example = 'Rrs_example 4 5 6 -vcom 1 -vchn 4'
     parser = argparse.ArgumentParser(description=None, epilog=example)
-    parser.add_argument('COM', nargs='+', type=int,
+    parser.add_argument('-COM', nargs='+', type=int, default=4,
                         help='COM port or ports to watch')
     parser.add_argument("-vcom", type=int, choices=[0, 1, 2, 3, 4],
-                        help="set verbosity on COM objects")
+                        help="set verbosity on COM objects", default=1)
     parser.add_argument("-vchn", type=int, choices=[0, 1, 2, 3, 4],
-                        help="set verbosity on channel objects")
+                        help="set verbosity on channel objects", default=3)
     args = parser.parse_args()
     run(args)
