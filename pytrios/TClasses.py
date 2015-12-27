@@ -38,15 +38,10 @@ class TSerial(Serial):
             self.stopbits = stopbits
             self.bytesize = bytesize
             self.verbosity = verbosity
-        except serial.SerialException, msg:
-            print("Error connecting to port {0}".format(self.port),
+        except Exception:
+            print("Error connecting to port {0}\n".format(self.port),
                   file=sys.stderr)
-            print(msg, file=sys.stderr)
-        except ValueError:
-            print("Invalid port ID in TriosConnectCOM {0}".format(self.port),
-                  file=sys.stderr)
-        except:
-            raise
+            return None
 
 
 class TProtocolError(Exception):

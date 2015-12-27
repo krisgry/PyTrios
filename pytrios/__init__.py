@@ -18,7 +18,7 @@ Email stsi[_at_]pml .ac. uk
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-Note: PyTrios builds on the *serial* module by Chris Liechti
+Note: PyTrios uses the *serial* module by Chris Liechti
 
 Tested on Python 2.7.3\n
 Last update: see __version__\n

@@ -18,7 +18,7 @@ Email stsi[_at_]pml .ac. uk
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-Note: PyTrios builds on the *serial* module by Chris Liechti
+Note: PyTrios uses the *serial* module by Chris Liechti
 
 Tested on Python 2.7.3\n
 Last update: see __version__\n
@@ -33,7 +33,6 @@ import struct
 import numpy as np
 import threading
 from TClasses import TProtocolError, TPacket, TSerial, TCommandSend
-lock = threading.Lock()
 
 __version__ = "2015.12.23"
 __author__ = "Stefan Simis"
@@ -212,15 +211,21 @@ def TMonitor(ports, baudrate=9600):
         for p in ports:
             ser = TSerial(p, timeout=0.01, baudrate=baudrate, xonxoff=True,
                           parity='N', stopbits=1, bytesize=8)
-            # associated port listening thread
-            ser.threadlisten = threading.Thread(target=TListen, args=(ser,))
-            ser.threadlive = threading.Event()   # clear to stop thread
-            ser.threadactive = threading.Event()  # clear to pause thread
-            ser.threadlive.set()
-            ser.threadactive.set()
-            COMobjslst.append(ser)
-            ser.threadlisten.start()  # start thread
-            ser.threadlisten.join(0.01)  # join calling thread
+            if ser.isOpen():
+                print(ser)
+                # associated port listening thread
+                ser.threadlisten = threading.Thread(target=TListen,
+                                                    args=(ser,))
+                ser.threadlive = threading.Event()   # clear to stop thread
+                ser.threadactive = threading.Event()  # clear to pause thread
+                ser.threadlive.set()
+                ser.threadactive.set()
+                COMobjslst.append(ser)
+                ser.threadlisten.start()  # start thread
+                ser.threadlisten.join(0.01)  # join calling thread
+        if sum([1 for c in COMobjslst if c.isOpen()]) == 0:
+            raise ValueError("TMonitor: no COM ports to watch")
+            sys.exit(1)
         return COMobjslst
     except:
         TClose(COMobjslst)

@@ -22,26 +22,18 @@ import pytrios.PyTrios as ps
 import sys
 import time
 import datetime
+import argparse
 import matplotlib.pyplot as plt
 
-if __name__ == '__main__':
-    if len(sys.argv) > 1:
-        cport = sys.argv[1].split(' ')
-    else:
-        cport = 4  # default
 
-    print("pytrios version {0} by {1} ({2})".format(ps.__version__,
-                                                    ps.__author__,
-                                                    ps.__license__),
-          file=sys.stdout)
-
-    coms = ps.TMonitor(cport, baudrate=9600)
+def run(args):
+    coms = ps.TMonitor(args.COM, baudrate=9600)
     # query the connected sensor(s)
     time.sleep(0.1)
 
     # set verbosity for com channel (com messages / errors)
     # 0/1/2/3/4 = none, errors, queries(default), measurements, all
-    coms[0].verbosity = 2
+    coms[0].verbosity = args.vcom
 
     # identify connected instruments
     ps.TCommandSend(coms[0], commandset=None, command='query')
@@ -59,9 +51,11 @@ if __name__ == '__main__':
         ps.TClose(coms)
         raise Exception("no SAM modules found")
 
+    for s in sams:
+        tc[s].verbosity = args.vcom  # set verbosity level for each sensor
+
     for go in range(1000):  # 100 measurements
         for s in sams:
-            tc[s].verbosity = 3  # set verbosity level for each channel/sensor
             lasttrigger = datetime.datetime.now()
             # trigger single measurement at auto integration time
             tc[s].startIntAuto(coms[0], trigger=lasttrigger)
@@ -106,3 +100,19 @@ if __name__ == '__main__':
     ps.TClose(coms)
 
     raw_input('Press enter to close')
+
+
+if __name__ == '__main__':
+    prog = "pytrios version {0} by {1} ({2})".format(ps.__version__,
+                                                     ps.__author__,
+                                                     ps.__license__)
+    example = 'Rrs_example 4 5 6 -vcom 1 -vchn 4'
+    parser = argparse.ArgumentParser(description=None, epilog=example)
+    parser.add_argument('COM', nargs='+', type=int,
+                        help='COM port or ports to watch')
+    parser.add_argument("-vcom", type=int, choices=[0, 1, 2, 3, 4],
+                        help="set verbosity on COM objects")
+    parser.add_argument("-vchn", type=int, choices=[0, 1, 2, 3, 4],
+                        help="set verbosity on channel objects")
+    args = parser.parse_args()
+    run(args)
