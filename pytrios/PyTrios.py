@@ -32,7 +32,8 @@ import time
 import struct
 import numpy as np
 import threading
-from TClasses import TProtocolError, TPacket, TSerial, TCommandSend
+from TClasses import TProtocolError, TPackMeasKeyError,\
+    TPacket, TSerial, TCommandSend
 
 __version__ = "2015.12.23"
 __author__ = "Stefan Simis"
@@ -105,11 +106,9 @@ def handlePacket(ser, packet):
         try:
             ch = tchannels[port_tid]
         except KeyError:
-            if ser.verbosity >= 1:
-                emsg = "handlePacket (measurement):" +\
-                    " invalid address: {0}".format(port_tid)
-                raise Warning(emsg)
-                return
+            emsg = "handlePacket (measurement):" +\
+                " invalid address: {0}".format(port_tid)
+            raise TPackMeasKeyError(emsg)
         try:
             if int(p.tid3) == 0:
                 if tchannels[port_tid].TInfo.ModuleType in['SAM', 'SAMIP']:
@@ -220,7 +219,6 @@ def TMonitor(ports, baudrate=9600):
             ser = TSerial(p, timeout=0.01, baudrate=baudrate, xonxoff=True,
                           parity='N', stopbits=1, bytesize=8)
             if ser.isOpen():
-                print(ser)
                 # associated port listening thread
                 ser.threadlisten = threading.Thread(target=TListen,
                                                     args=(ser,))
@@ -296,6 +294,16 @@ def TListen(ser):
                         handlePacket(ser, packet)
                 except TProtocolError, msg:
                     raise Warning(msg)
+                except TPackMeasKeyError, msg:
+                    raise Warning(msg)
+                    if ser.isOpen:
+                        ser.flushOutput()
+                        ser.flushInput()
+                        s = ''
+                        # resend query?
+                    else:
+                        raise Exception('Unrecoverable error - reboot sensors')
+                        sys.exit(1)
                 except Exception, msg:
                     raise Warning(msg)
             elif timeouttimer - time.time() > 1:

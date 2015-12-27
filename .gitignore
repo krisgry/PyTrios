@@ -1,6 +1,10 @@
 .pyc
 test*
 
+calfiles/
+
+.gitignore
+
 #################
 ## Eclipse
 #################

@@ -1,4 +1,3 @@
-#!/usr/bin/python
 # -*- coding: utf-8 -*-
 """
 Created on Wed Dec 23 20:18:22 2015
@@ -45,6 +44,14 @@ class TSerial(Serial):
 
 
 class TProtocolError(Exception):
+    def __init__(self, value):
+        self.value = value
+
+    def __str__(self):
+        return repr(self.value)
+
+
+class TPackMeasKeyError(Exception):
     def __init__(self, value):
         self.value = value
 
