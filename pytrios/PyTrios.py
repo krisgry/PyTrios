@@ -2,7 +2,7 @@
 """
 Implements serial communication with TriOS sensors in Python\n
 
-Copyright (C) 2014  Stefan Simis for the Finnish Environment Institute SYKE\n
+Copyright (C) 2015  Stefan Simis, Plymouth Marine Laboratory\n
 Email stsi[_at_]pml .ac. uk
 
     This program is free software: you can redistribute it and/or modify
