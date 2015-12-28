@@ -65,7 +65,7 @@ def run(args):
 
     for s in sams:
         # 0/1/2/3/4 = none, errors, queries(default), measurements, all
-        tc[s].verbosity = args.vcom  # set verbosity level for each sensor
+        tc[s].verbosity = args.vchn  # set verbosity level for each sensor
 
     counter = 0
     starttime = time.time()
@@ -135,21 +135,22 @@ def run(args):
                     except:
                         cspecs.append([nan]*len(wlOut))
 
-            # plot results
-            plt.ion()
-            fig = plt.figure(1)
-            fig.clf()
-            ax1 = fig.add_axes((0.1, 0.1, 0.8, 0.8))
-            if calibrate:  # get calibrated spectra
-                p = [ax1.plot(wlOut, cs, label=sid)
-                     for cs, sid in zip(cspecs, sids)]
-            else:
-                p = [ax1.plot(sp, label=sid)
-                     for sp, sid in zip(specs, sids)]
-            plt.title("spectrum {0} at {1}".format(counter, lasttrigger))
-            plt.legend()
-            plt.draw()
-            plt.pause(0.01)
+            if args.plotting:
+                # plot results
+                plt.ion()
+                fig = plt.figure(1)
+                fig.clf()
+                ax1 = fig.add_axes((0.1, 0.1, 0.8, 0.8))
+                if calibrate:  # get calibrated spectra
+                    p = [ax1.plot(wlOut, cs, label=sid)
+                         for cs, sid in zip(cspecs, sids)]
+                else:
+                    p = [ax1.plot(sp, label=sid)
+                         for sp, sid in zip(specs, sids)]
+                plt.title("spectrum {0} at {1}".format(counter, lasttrigger))
+                plt.legend()
+                plt.draw()
+                plt.pause(0.01)
 
         if (args.samples is not None and counter >= args.samples) or\
                 (args.period is not None and
@@ -193,10 +194,13 @@ if __name__ == '__main__':
                         choices=[0, 4, 8, 16, 32, 64, 128, 256, 512, 1024,
                                  2048, 4096, 8192],
                         help="Integration time in ms (0 = Auto)")
+    parser.add_argument("-plotting", dest='plotting', action='store_true',
+                        help="On-screen plotting (default on)", default=True)
     args = parser.parse_args()
 
+    # set defaults for max sampling period and number if both are undefined
     if args.period is None and args.samples is None:
-        args.samples = 10
+        args.samples = 20
         args.period = 1 * 60
 
     run(args)

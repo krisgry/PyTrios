@@ -69,7 +69,7 @@ def _ProcessDatIniFiles(foldername):
                 elif out['IDDataTypeSub2'].startswith('AQ'):
                     cal_water = out
         elif f.endswith('.ini'):
-            print("parsing {0}".format(f), file=sys.stdout)
+            print("\tparsing {0}".format(f), file=sys.stdout)
             iniOut = _ParseIniFile(os.path.join(foldername, f))
             inis.append(iniOut)
         if len(inis) == 1:

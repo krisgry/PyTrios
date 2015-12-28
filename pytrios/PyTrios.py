@@ -165,17 +165,18 @@ def SAMInterpreter(regch, packet):
                 sl = list(sublist)
                 sl.reverse()
                 outspec = outspec+sl
+            outspec.reverse()  # assuming this is not a UV sensor..
             regch.TSAM.lastRawSAM = outspec
             regch.TSAM.lastRawSAMTime = packet.timeStampPC
             msintt = 2*2**(outspec[0] & 0b1111)  # integration time
             regch.TSAM.lastIntTime = msintt
             # reset to receive the next spectrum
             regch.TSAM.dataframes = [[None]]*8
-            if regch.verbosity >= 3:
+            if regch.verbosity >= 2:
                 delay = packet.timeStampPC - regch.lasttrigger
-                print("SAMInterpreter: Spectrum from {0} at {1} ({2} s)"
+                print("SAMInterpreter: Spectrum ({3}ms) from {0}, {1} ({2} s)"
                       .format(regch.TInfo.serialn, regch.TInfo.TID,
-                              delay.total_seconds()),
+                              delay.total_seconds(), msintt),
                       file=sys.stdout)
         else:
             emsg = "SAM Interpreter: Incomplete spectrum, discarded"
