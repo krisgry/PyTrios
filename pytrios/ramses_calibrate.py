@@ -180,9 +180,9 @@ def _ParseIniFile(filename):
         return iniOut
 
 
-def raw2cal_intercal(spec, msdate, serialn,
-                     CalData, wlOut=np.arange(320, 955, 3.3)):
-    """Calibration according to Trios manual, page 13+
+def raw2cal_Air(spec, msdate, serialn,
+                CalData, wlOut=np.arange(320, 955, 3.3)):
+    """Calibration IN AIR according to Trios manual, page 13+
     * spec = raw spectrum (list of int)\n
     * msdate = measurement datetime\n
     * serialn = module serial number\n
