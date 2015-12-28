@@ -59,7 +59,7 @@ def _ProcessDatIniFiles(foldername):
     for f in files:
         out = ''
         if f.endswith('.dat'):
-            print("parsing {0}".format(f), file=sys.stdout)
+            print("\tparsing {0}".format(f), file=sys.stdout)
             out = _ParseDatFile(os.path.join(foldername, f))
             if out['IDDataTypeSub1'] == 'BACK':
                 back = out
@@ -219,8 +219,8 @@ def raw2cal_intercal(spec, msdate, serialn,
     M = np.array([np.nan]*256)
     M[0:len(spec)] = np.array(spec)/float(65535)
     # scale Background cal data to integration time
-    B = B0+(t1/t0*B1)
-    C = M-B
+    B = B0 + (t1/t0*B1)
+    C = M - B
     # subtract dark offset,
     Offset = np.mean(C[dp1-1:dp2])  # dark pixels
     D = C-Offset

@@ -213,11 +213,12 @@ class TSAM(object):
     *lastRawSAM* = last uncalibrated spectrum from SAM unit\n
     *lastRawSAMTime* = Reception timestamp of last spectrum\n"""
     def __init__(self, Settings=SAMSettings, dataframes=[[None]]*8,
-                 lastRawSAM=None, lastRawSAMTime=None):
+                 lastRawSAM=None, lastRawSAMTime=None, lastIntTime=None):
         self.Settings = Settings()
         self.dataframes = dataframes
         self.lastRawSAMTime = lastRawSAMTime
         self.lastRawSAM = lastRawSAM
+        self.lastIntTime = lastIntTime
 
     def __repr__(self):
         ltime = self.lastRawSAMTime

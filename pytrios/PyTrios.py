@@ -35,7 +35,7 @@ import threading
 from TClasses import TProtocolError, TPackMeasKeyError,\
     TPacket, TSerial, TCommandSend
 
-__version__ = "2015.12.23"
+__version__ = "2015.12.28"
 __author__ = "Stefan Simis"
 __license__ = "GPL v3"
 
@@ -145,8 +145,9 @@ def SAMInterpreter(regch, packet):
     In the following, if we place LEdata directly into the dataframes slice
     it will be overwritten upon prompt arrival of a new packet, even if this
     concerns a different entry of the tchannels dictionary. Odd!
-    Retrieving the whole list of dataframes first circumvents this.
-    Points to garbage collection?
+    Reading and writing back the list of dataframes first circumvents this.
+    Packets arriving in rapid succession re-use memory blocks. So this
+    possibly points to sloppy garbage collection?
     """
     dataframes = regch.TSAM.dataframes[:]
     dataframes[packet.framebyte] = LEdata
@@ -166,6 +167,8 @@ def SAMInterpreter(regch, packet):
                 outspec = outspec+sl
             regch.TSAM.lastRawSAM = outspec
             regch.TSAM.lastRawSAMTime = packet.timeStampPC
+            msintt = 2*2**(outspec[0] & 0b1111)  # integration time
+            regch.TSAM.lastIntTime = msintt
             # reset to receive the next spectrum
             regch.TSAM.dataframes = [[None]]*8
             if regch.verbosity >= 3:
