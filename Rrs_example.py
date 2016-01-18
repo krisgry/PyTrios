@@ -18,15 +18,20 @@ Enjoy--
 from __future__ import print_function
 import pytrios.PyTrios as ps
 import pytrios.ramses_calibrate as rcal
+from pytrios import gpslib
 import sys
 import time
 import datetime
 import argparse
+import serial
 from numpy import arange, nan, isnan
 import matplotlib.pyplot as plt
 # force mathtext to use sans serif
 plt.rcParams['mathtext.fontset'] = 'stixsans'
 plt.rcParams['mathtext.default'] = 'regular'
+
+prog = "pytrios v{0} by {1} ({2})".format(ps.__version__, ps.__author__,
+                                          ps.__license__)
 
 
 def run(args):
@@ -42,6 +47,14 @@ def run(args):
             sys.exit(1)
     else:
         calibrate = False
+
+    if args.GPS is not None:
+        gpsport = str(args.GPS)
+        gpsport = "COM"+gpsport.upper().strip('COM')
+        gps = startGps(gpsport)
+        usegps = True
+    else:
+        usegps = False
 
     # connect and start listening on specified COM port(s)
     coms = ps.TMonitor(args.COM, baudrate=9600)
@@ -75,17 +88,29 @@ def run(args):
     go = True
     while go:
         try:
+            if usegps:
+                gpstimer = time.time()
+                while (time.time() - gpstimer < 10) and\
+                        (gps.fix_quality < 2 or gps.old):
+                    print("Waiting for GPS fix", file=sys.stdout)
+                    time.sleep(1)
+
             counter += 1
             for s in sams:
                 lasttrigger = datetime.datetime.now()
                 lasttrigstr = lasttrigger.isoformat()
+                lasttrigGPSdt = gps.datetime.isoformat()
+                lasttrigGPSlat = str(gps.lat)
+                lasttrigGPSlon = str(gps.lon)
+                lasttrigGPSspeed = str(gps.speed)
+                lasttrigGPSheading = str(gps.heading)
                 if args.inttime > 0:
                     # trigger single measurement at fixed integration time
                     tc[s].startIntSet(coms[0], args.inttime, trigger=lasttrigger)
                 else:
                     # trigger single measurement at auto integration time
                     tc[s].startIntAuto(coms[0], trigger=lasttrigger)
-    
+
             # follow progress
             npending = len(sams)
             while npending > 0:
@@ -93,20 +118,20 @@ def run(args):
                 npending = sum([1 for s in sams if tc[s].is_pending()])
                 # print(nfinished, npending)
                 time.sleep(0.05)
-    
+
             # display some info:
             # how long did they take?
             delays = [tc[s].TSAM.lastRawSAMTime - lasttrigger for s in sams]
             delaysec = max([d.total_seconds() for d in delays])
-    
+
             print("\t{0} spectra received, triggered at {1} ({2} s)"
                   .format(nfinished, lasttrigger, delaysec), file=sys.stdout)
-    
+
             if nfinished == len(sams):
                 print("-{0}- All triggered measurements received"
                       .format(str(counter).zfill(4)),
                       file=sys.stdout)
-    
+
             if nfinished == 0:
                 raise Warning("No results received. Attempting to reconnect.. ")
                 # no response? re-send query to see who is still talking
@@ -120,7 +145,7 @@ def run(args):
                 sns = [tc[k].TInfo.serialn for k in sams]  # sensor ids
                 print("found SAM modules: {0}".format(zip(chns, sns)),
                       file=sys.stdout)
-    
+
             else:
                 # gather succesful results
                 specs = [tc[s].TSAM.lastRawSAM
@@ -129,15 +154,19 @@ def run(args):
                         for s in sams if tc[s].is_finished()]
                 itimes = [tc[s].TSAM.lastIntTime
                           for s in sams if tc[s].is_finished()]
-    
+
                 if args.rawout is not None:
                     #  write raw data to specified file
                     for sp, si, it in zip(specs, sids, itimes):
-                        outstr = ",".join([lasttrigstr, si, str(it),
+                        outstr = ",".join([lasttrigstr,
+                                           lasttrigGPSdt,lasttrigGPSlat,
+                                           lasttrigGPSlon, lasttrigGPSspeed,
+                                           lasttrigGPSheading,
+                                           si, str(it),
                                            ",".join([str(s) for s in sp])])+'\n'
                         with open(args.rawout, 'a+') as f:
                             f.write(outstr)
-    
+
                 if calibrate:  # get calibrated spectra
                     cspecs = []
                     wlOut = arange(320, 955, 3.3)
@@ -149,17 +178,21 @@ def run(args):
                             cspecs.append(csp)
                         except:
                             cspecs.append([nan]*len(wlOut))
-    
+
                 if calibrate and args.calout is not None:
                     #  write calibrated data to specified file
                     for sp, si, it in zip(cspecs, sids, itimes):
                         if sum([1 for s in sp if isnan(s)]) < len(sp):
-                            outstr = ",".join([lasttrigstr, si, str(it),
+                            outstr = ",".join([lasttrigstr,
+                                               lasttrigGPSdt, lasttrigGPSlat,
+                                               lasttrigGPSlon, lasttrigGPSspeed,
+                                               lasttrigGPSheading,
+                                               si, str(it),
                                                ",".join([str(s) for s in sp])])
                             outstr = outstr + '\n'
                             with open(args.calout, 'a+') as f:
                                 f.write(outstr)
-    
+
                 if args.plotting:
                     # plot results
                     plt.ion()
@@ -176,7 +209,7 @@ def run(args):
                     plt.legend()
                     plt.draw()
                     plt.pause(0.01)
-    
+
             if (args.samples is not None and counter >= args.samples) or\
                     (args.period is not None and
                      ((time.time() - starttime)/60.0 >= args.period)):
@@ -192,14 +225,28 @@ def run(args):
     raw_input('Press enter to close')
 
 
-if __name__ == '__main__':
-    prog = "pytrios v{0} by {1} ({2})".format(ps.__version__,
-                                              ps.__author__,
-                                              ps.__license__)
-    example = 'Rrs_example 4 5 6 -vcom 1 -vchn 4 -calpath calfiles -inttime 0'
+def startGps(comportstr):
+    ser = serial.Serial(comportstr, baudrate=4800)  # open serial port
+    if not ser.isOpen:
+        ser.open()
+    if not ser.isOpen:
+        print("Could not open GPS serial port")
+        sys.exit(1)
+
+    gps = gpslib.GPSManager()
+    gps.add_serial_port(ser)
+    gps.start()
+    return gps
+
+
+def parse_arguments():
+    example = """Rrs_example 4 5 6 -GPS 7 -vcom 1 -vchn 4 \
+    -calpath calfiles -inttime 0 -period 10"""
     parser = argparse.ArgumentParser(description=None, epilog=example)
-    parser.add_argument('COM', nargs='+', type=int,
-                        help='COM port or ports to watch')
+    parser.add_argument('TCOM', nargs='+', type=int,
+                        help='Trios COM port(s)')
+    parser.add_argument('-GPS', type=int,
+                        help='GPS COM port')
     parser.add_argument("-vcom", type=int, choices=[0, 1, 2, 3, 4],
                         help="set verbosity on COM objects", default=1)
     parser.add_argument("-vchn", type=int, choices=[0, 1, 2, 3, 4],
@@ -221,12 +268,15 @@ if __name__ == '__main__':
     parser.add_argument("-plotting", dest='plotting', action='store_true',
                         help="On-screen plotting (default on)")
     args = parser.parse_args()
-
     # set defaults for max sampling period and number if both are undefined
     if args.period is None and args.samples is None:
         args.samples = 20
         args.period = 1 * 60
 
-    print("Plotting {0}".format(args.plotting), file=sys.stdout)
+    return args
 
+
+if __name__ == '__main__':
+    print(prog)
+    args = parse_arguments()
     run(args)
