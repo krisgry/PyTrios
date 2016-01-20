@@ -83,7 +83,8 @@ class GPSParser(object):
         #                                      3 = 3D fix
 
         result = {
-            'fix_quality': int(gps_parts[2])
+            'type': 'gpgsa',
+            'fix_quality': int(gps_parts[1])
         }
 
         return result
@@ -390,7 +391,7 @@ class GPSManager(object):
         Tells the serial threads to stop.
         """
         self.stop_gps = True
-        time.sleep(2)
+        time.sleep(1)
 
         for thread in self.threads:
             thread.join(1)

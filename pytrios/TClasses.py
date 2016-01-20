@@ -470,7 +470,9 @@ def TCommandSend(ser, commandset, command='query', ipschan='00', par1='00'):
                                      + " 00 30 50 01 "+str(par1)+" 01"),
         'fastauto': bytearray.fromhex("23 " + str(ipschan)
                                       + " 00 30 50 01 0C 01 23 " + str(ipschan)
-                                      + " 00 30 78 F0 03 01")}
+                                      + " 00 30 78 F0 03 01"),
+        'query_sam': bytearray.fromhex("23 " + str(ipschan)
+                                       + " 00 30 B0 00 00 01")}
 
     """
     Note baudrate changes did not function with an IPS box. Test further.

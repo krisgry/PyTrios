@@ -59,6 +59,8 @@ def handlePacket(ser, packet):
             for c in ['02', '04', '06', '08']:
                 # query submodule information
                 TCommandSend(ser, commandset=None, ipschan=c, command='query')
+                TCommandSend(ser, commandset='SAM', ipschan=c,
+                             command='query_sam')
 
     if p.packetType == 'query' and p.tchannel.TInfo.ModuleType == 'MicroFlu':
         ch = p.tchannel
@@ -101,7 +103,10 @@ def handlePacket(ser, packet):
         tchannels[port_tid] = ch
 
     if p.packetType == 'measurement':
-        port_tid = ser.port + '_' + p.TID
+        if int(p.tid3) in [20, 30]:
+            port_tid = ser.port + '_' + p.TID[0:4] + '80'
+        else:
+            port_tid = ser.port + '_' + p.TID
         interpreter = ''
         try:
             ch = tchannels[port_tid]

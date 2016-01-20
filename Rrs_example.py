@@ -58,19 +58,18 @@ def run(args):
 
     # connect and start listening on specified COM port(s)
     coms = ps.TMonitor(args.COM, baudrate=9600)
-
     # set verbosity for com channel (com messages / errors)
     # 0/1/2 = none, errors, all
     coms[0].verbosity = args.vcom
 
     # identify connected instruments
     ps.TCommandSend(coms[0], commandset=None, command='query')
-    time.sleep(0.25)  # wait for query results
+    time.sleep(1)  # wait for query results
 
     # identify SAM instruments from identified channels
     tk = ps.tchannels.keys()
     tc = ps.tchannels
-    sams = [k for k in tk if ps.tchannels[k].TInfo.ModuleType == 'SAM']  # keys
+    sams = [k for k in tk if ps.tchannels[k].TInfo.ModuleType in ['SAM', 'SAMIP']]  # keys
     chns = [tc[k].TInfo.TID for k in sams]  # channel addressing
     sns = [tc[k].TInfo.serialn for k in sams]  # sensor ids
     print("found SAM modules: {0}".format(zip(chns, sns)), file=sys.stdout)
@@ -90,20 +89,37 @@ def run(args):
         try:
             if usegps:
                 gpstimer = time.time()
-                while (time.time() - gpstimer < 10) and\
+                while (time.time() - gpstimer < 3) and\
                         (gps.fix_quality < 2 or gps.old):
                     print("Waiting for GPS fix", file=sys.stdout)
+                    print("Fix quality {0}, {1}".format(gps.fix_quality, gps.lon))
                     time.sleep(1)
-
+                if (time.time() - gpstimer >= 3) and\
+                        (gps.fix_quality < 2 or gps.old):
+                    print("GPS timed out", file=sys.stdout)
+                    lasttrigGPSdt = ''
+                    lasttrigGPSlat = ''
+                    lasttrigGPSlon = ''
+                    lasttrigGPSspeed = ''
+                    lasttrigGPSheading = ''
+            else:
+                lasttrigGPSdt = ''
+                lasttrigGPSlat = ''
+                lasttrigGPSlon = ''
+                lasttrigGPSspeed = ''
+                lasttrigGPSheading = ''
             counter += 1
             for s in sams:
                 lasttrigger = datetime.datetime.now()
                 lasttrigstr = lasttrigger.isoformat()
-                lasttrigGPSdt = gps.datetime.isoformat()
-                lasttrigGPSlat = str(gps.lat)
-                lasttrigGPSlon = str(gps.lon)
-                lasttrigGPSspeed = str(gps.speed)
-                lasttrigGPSheading = str(gps.heading)
+                try:
+                    lasttrigGPSdt = gps.datetime.isoformat()
+                    lasttrigGPSlat = str(gps.lat)
+                    lasttrigGPSlon = str(gps.lon)
+                    lasttrigGPSspeed = str(gps.speed)
+                    lasttrigGPSheading = str(gps.heading)
+                except:
+                    pass
                 if args.inttime > 0:
                     # trigger single measurement at fixed integration time
                     tc[s].startIntSet(coms[0], args.inttime, trigger=lasttrigger)
@@ -133,7 +149,8 @@ def run(args):
                       file=sys.stdout)
 
             if nfinished == 0:
-                raise Warning("No results received. Attempting to reconnect.. ")
+                warningmsg = "No results received. Attempting to reconnect.. "
+                print(warningmsg, file=sys.stderr)
                 # no response? re-send query to see who is still talking
                 ps.TCommandSend(coms[0], commandset=None, command='query')
                 time.sleep(0.25)  # wait for query results
@@ -177,7 +194,10 @@ def run(args):
                                                    wlOut=wlOut)
                             cspecs.append(csp)
                         except:
+                            warnmsg = "Could not calibrate spectrum from {0}. Is calibration file present?".format(sid)
                             cspecs.append([nan]*len(wlOut))
+                            print(warnmsg, file=sys.stderr)
+                            pass
 
                 if calibrate and args.calout is not None:
                     #  write calibrated data to specified file
@@ -216,14 +236,20 @@ def run(args):
                 go = False
         except:
             ps.TClose(coms)
+            if usegps:
+                gps.stop()
+                # [p.close() for p in gps.serial_ports]
             print("unexpected error!")
             raise
             sys.exit(1)
     # Cleanly close COM connections + listening threads
     ps.TClose(coms)
+    if usegps:
+        gps.stop()
+        # [p.close() for p in gps.serial_ports]
 
     raw_input('Press enter to close')
-
+    sys.exit(0)
 
 def startGps(comportstr):
     ser = serial.Serial(comportstr, baudrate=4800)  # open serial port
@@ -243,7 +269,7 @@ def parse_arguments():
     example = """Rrs_example 4 5 6 -GPS 7 -vcom 1 -vchn 4 \
     -calpath calfiles -inttime 0 -period 10"""
     parser = argparse.ArgumentParser(description=None, epilog=example)
-    parser.add_argument('TCOM', nargs='+', type=int,
+    parser.add_argument('COM', nargs='+', type=int,
                         help='Trios COM port(s)')
     parser.add_argument('-GPS', type=int,
                         help='GPS COM port')
@@ -266,7 +292,7 @@ def parse_arguments():
                                  2048, 4096, 8192],
                         help="Integration time in ms (0 = Auto)")
     parser.add_argument("-plotting", dest='plotting', action='store_true',
-                        help="On-screen plotting (default on)")
+                        help="On-screen plotting (default off)")
     args = parser.parse_args()
     # set defaults for max sampling period and number if both are undefined
     if args.period is None and args.samples is None:
