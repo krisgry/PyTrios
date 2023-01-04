@@ -10,7 +10,6 @@ from TClasses import TProtocolError, TPacket, TChannel
 @author: Stefan Simis
 """
 
-from __future__ import print_function
 import sys
 import datetime
 import struct
@@ -25,18 +24,18 @@ TIMEOUT_MF = 5
 
 class TSerial(Serial):
     def __init__(self, port, timeout=0.01, baudrate=9600, xonxoff=True,
-                 parity='N', stopbits=1, bytesize=8, verbosity=1):
+                 parity='N', stopbits=1, bytesize=8):#, verbosity=1):
         try:
             port = str(port)
-            port = "COM"+port.upper().strip('COM')
+            port = "/dev/ttyUSB"+port.strip('/dev/ttyUSB')
             Serial.__init__(self, port)
-            self.setBaudrate(baudrate)
+            self.baudrate = baudrate
             self.timeout = timeout
             self.xonxoff = xonxoff
             self.parity = parity
             self.stopbits = stopbits
             self.bytesize = bytesize
-            self.verbosity = verbosity
+            #self.verbosity = verbosity
         except Exception:
             print("Error connecting to port {0}\n".format(self.port),
                   file=sys.stderr)
@@ -67,13 +66,13 @@ class TPacket(object):
             return
         self.timeStampPC = datetime.datetime.now()  # time of parsing
         # identity byte 1
-        self.id1 = ord(s2parse[0])
+        self.id1 = s2parse[0]
         # 3 msb give size of data frame
-        self.id1_databytes = 2*2**(ord(s2parse[0]) >> 5)
+        self.id1_databytes = 2*2**(s2parse[0] >> 5)
         # 5th bit is for future compatibility
-        self.id1_fut = (ord(s2parse[0]) & 0b10000) >> 4
+        self.id1_fut = (s2parse[0] & 0b10000) >> 4
         # first 4 lsb are identity bits
-        self.id1_id = ord(s2parse[0]) & 0b1111
+        self.id1_id = s2parse[0] & 0b1111
         # error defined in TriOS protocol
         if self.id1_databytes == 256:
             print("TPacket init: Blocksize invalid", file=sys.stderr)
@@ -82,7 +81,7 @@ class TPacket(object):
         try:
             Data = struct.unpack(formatstring, s2parse)
         except:
-            prettyhex = ":".join("{0:x}".format(ord(c)) for c in s2parse)
+            prettyhex = ":".join("{0:x}".format(c) for c in s2parse)
             print("TPacket init: cannot unpack block:\n\t{0}"
                   .format(prettyhex), file=sys.stderr)
             return
@@ -113,7 +112,7 @@ class TPacket(object):
             # sensor reports error
             self.packetType = 'error'
             emsg = "TSerial_parse: Instrument reports error, wrong command?"
-            prettyhex = ":".join("{0:x}".format(ord(c)) for c in s2parse)
+            prettyhex = ":".join("{0:x}".format(c) for c in s2parse)
             print("{0}\n\t{1}".format(emsg, prettyhex), file=sys.stderr)
             return
 
@@ -389,7 +388,7 @@ class TChannel(object):
                         self.TInfo.serialn,
                         hex(id(self)))
             return msg
-        except Exception, e:
+        except Exception as e:
             print(e)  # debug
             return "<PyTrios channel (no info)>"
 
@@ -492,7 +491,7 @@ def TCommandSend(ser, commandset, command='query', ipschan='00', par1='00'):
 
     commandhex = commanddict[commandsetdict[commandset]][command]
     try:
-        if ser.outWaiting() > 0:
+        if ser.out_waiting > 0:
             ser.flush()
         ser.write(commandhex)
         if ser.verbosity >= 3:
