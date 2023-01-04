@@ -4,6 +4,19 @@ See version by calling
 >import pytrios as ps
 >ps.__version__
 
+
+2023.01.04
+
+Upgraded to the version of PyTrios used in the So-Rad system (see https://github.com/monocle-h2020/so-rad). 
+The codebase has also been brought back to just the implementation of PyTrios sensor monitoring, minus added peripherals such as GPS. The So-Rad codebase is a more versatile solution for system integration.
+
+- Removed old, broken examples
+- Updated to Python3
+- Added a test script
+- Added a single 'manager' interface
+- Removed gpslib
+
+
 2015.12.28
 
 Xmas project: Completely revamped PyTrios library.
@@ -19,7 +32,4 @@ Major refactoring: main functionality wrapped in TChannel and TPacket classes in
 
 The front-end (PyTrios.py) is now limited to the active monitoring of COM ports and subsequent handling of packets
 
-An example/template of a fairly elaborate multiple RAMSES sensor configuration over an IPS box is included. 
-
-Share and enjoy
 
