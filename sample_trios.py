@@ -23,7 +23,7 @@ def single_sample(radiometry_manager, inttime, file):
 
         if file is not None:
             with open(file, 'a+') as outfile:
-                outfile.write(f"{str(sid)}\t{trig_id.isoformat()}\t{str(itimes[i])}\t{','.join([str(s) for s in specs[i]])}")
+                outfile.write(f"{str(sid)}\t{trig_id.isoformat()}\t{str(itimes[i])}\t{','.join([str(s) for s in specs[i]])}\n")
 
 
 def run_sample(port, repeat=1, type=1, inttime=0, file=None):
