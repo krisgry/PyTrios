@@ -219,6 +219,7 @@ def TMonitor(ports, baudrate=9600):
         for p in ports:
             ser = TSerial(p, timeout=0.01, baudrate=baudrate, xonxoff=True,
                           parity='N', stopbits=1, bytesize=8)
+            ser.verbosity = 1
             if ser.isOpen():
                 # associated port listening thread
                 ser.threadlisten = threading.Thread(target=TListen,

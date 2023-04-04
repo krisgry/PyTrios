@@ -20,6 +20,7 @@ import logging
 import threading
 import pytrios.pytriosg2 as pt2
 import pytrios.pytriosg1 as ps
+from numpy import log2
 
 log = logging.getLogger('rad')
 log.setLevel('INFO')
@@ -86,7 +87,6 @@ class TriosG2Manager(object):
     def stop(self):
         for instrument in self.instruments:
             instrument.stop()
-
 
     def sample_all(self, trigger_time, inttime=0, sams_included=None):
         """Send a command to take a spectral sample from every sensor currently detected by the program"""
@@ -237,12 +237,12 @@ class TriosG2Ramses(object):
         if inttime is None:
             log.warning(f"{self.mod['port']}: failed to detect integration time setting.")
 
-
     def set_integration_time(self, inttime=0):
         self.ready = False
         self.busy = True
-        log.info(f"{self.mod['port']}: setting integration time to {inttime}")
-        pt2.set_integration_time(self.mod, inttime=inttime)
+        inttime_index = int(log2(inttime)-1)
+        log.info(f"{self.mod['port']}: setting integration time to {inttime} ({inttime_index})")
+        pt2.set_integration_time(self.mod, inttime=inttime_index)
         inttime_read = pt2.read_one_register(self.mod, 'integration_time_cfg')
         if inttime_read is None:
             log.warning(f"{self.mod['port']}: failed to detect integration time setting.")
@@ -339,13 +339,12 @@ class TriosManager(object):
     """
     Trios G1 manager class
     """
-    def __init__(self, rad):
+    def __init__(self, port):
         # import pytrios only if used
-        self.config = rad  # dictionary with radiometry settings
-        self.ed_sampling = rad['ed_sampling']
-        self.ports = [self.config['port1'], self.config['port2'], self.config['port3']]  # list of strings
+        self.ports = [port]  # list of strings
         self.coms = ps.TMonitor(self.ports, baudrate=9600)
         self.sams = []
+        self.ready = False
         self.connect_sensors()
         # track reboot cycles to prevent infinite rebooting of sensors if something unexpected happens (e.g a permanent sensor failure)
         self.reboot_counter = 0
@@ -366,35 +365,34 @@ class TriosManager(object):
         """(re)connect all serial ports and query all sensors"""
         self.busy = True
 
-        log.info("(re)connecting to radiometers: closing com ports (wait 5 sec)")
         ps.TClose(self.coms)
         ps.tchannels = {}
-        time.sleep(5)
+        time.sleep(1)
 
-        log.info("(re)connecting to radiometers: restarting listening threads (wait 2 sec)")
+        log.info("Connecting: Starting listening threads")
         self.coms = ps.TMonitor(self.ports, baudrate=9600)
-        time.sleep(2)
+        time.sleep(3)
 
         for com in self.coms:
             # set verbosity for com channel (com messages / errors)
             # 0/1/2 = none, errors, all
-            com.verbosity = self.config['verbosity_com']
+            com.verbosity = 1
             # query connected instruments
             ps.TCommandSend(com, commandset=None, command='query')
         time.sleep(3)  # pause to receive query results
-
         self._identify_sensors()
 
         if len(self.sams) == 0:
             ps.TClose(self.coms)
             self.ready = False
             log.critical("no SAM modules found")
-            raise Exception("no SAM modules found")
+        else:
+            self.ready = True
 
         for s in self.sams:
             # 0/1/2/3/4 = none, errors, queries(default), measurements, all
-            self.tc[s].verbosity = self.config['verbosity_chn']  # set verbosity level for each sensor
-            self.tc[s].failures = 0  # TODO: this adds a variable to the class, should really be added in the tchannel Class
+            self.tc[s].verbosity = 1
+            self.tc[s].failures = 0
 
         self.busy = False
 
@@ -405,81 +403,11 @@ class TriosManager(object):
         self.sams = [k for k in self.tk if ps.tchannels[k].TInfo.ModuleType in ['SAM', 'SAMIP']]  # keys
         self.chns = [self.tc[k].TInfo.TID for k in self.sams]  # channel addressing
         self.sns = [self.tc[k].TInfo.serialn for k in self.sams]  # sensor ids
-        try:
-            log.info(self.tc)
-            tc_ed_index = self.sns.index(self.config['ed_sensor_id'])  # index (in sams list) of the ed sensor
-            self.tk_ed = self.tk[tc_ed_index]
-        except Exception as err:
-            log.warning("Ed sensor not found (looking for {0}), got {1}. Disabling any Ed sampling schedule".format(self.config['ed_sensor_id'], self.sns))
-            self.tk_ed = None
-            self.ed_sampling = False
-            #log.exception(err)
 
-        if self.config['verbosity_com'] > 1:
-            log.info("found SAM modules: {0}".format(list(zip(self.chns, self.sns))))
-        if self.config['verbosity_com'] > 2:
-            log.info("found channels: {0}".format(list(self.tk)))
-
-    def power_cycle_sensors(self):
-        """reboot sensors by cycling power through GPIO/relay control
-        All sensors must then be reconnected/identified"""
-        self.busy = True
-        GPIO.setmode(GPIO.BCM)
-        pin = self.config['gpio1']
-        GPIO.setup(pin, GPIO.OUT)
-        GPIO.output(pin, GPIO.LOW)
-        time.sleep(30)
-        GPIO.output(pin, GPIO.HIGH)
-        time.sleep(10)
-        self.reboot_counter += 1
-        self.last_cold_start = datetime.datetime.now()
-        self.connect_sensors()
-        self.busy = False
-
-    def check_and_restore_sensor_number(self):
-        """check (called periodically from main app) whether the expected number of sensors are connected. 
-        This will help recover from an incomplete reboot and 'tired sensor syndrome' in trios acc sensors."""
-        reboot_int = self.config['minimum_reboot_interval_sec']
-        time_elapsed_since_last_check = datetime.datetime.now()-self.last_connectivity_check
-        log.debug("reboot_int: {0}, time_elapsed: {1}, n_sensors_now: {2}".format(reboot_int,
-                                                                                  time_elapsed_since_last_check.total_seconds(),
-                                                                                  len(self.sams)))
-        if len(self.sams) == self.config['n_sensors']:
-            # all is fine
-            return True
-
-        if time_elapsed_since_last_check.total_seconds() < reboot_int:
-            # wait a bit longer before taking action
-            return False
-
-        # take action
-        self.busy = True
-        self.last_connectivity_check = datetime.datetime.now()
-        if self.config['use_gpio_control']:
-            if self.config['verbosity_chn'] > 0:
-                log.warning("Number of sensors < {0}. Rebooting".format(self.config['n_sensors']))
-            self.power_cycle_sensors()
-        else:
-            if self.config['verbosity_chn'] > 0:
-                log.warning("Number of sensors < {0}. Reconnecting (no relay control set)".format(self.config['n_sensors']))
-            self.connect_sensors()
-        self.busy = False
-        if len(self.sams) == self.config['n_sensors']:
-            # all is fine
-            return True
-        else:
-            return False
+        log.info("found SAM modules: {0}".format(list(zip(self.chns, self.sns))))
 
 
-    def sample_ed(self, trigger_id):
-        """this will trigger sampling only the sensor identified as the Ed sensor"""
-        edsam = self.tk_ed
-        if not isinstance(edsam, list):
-            edsam = [edsam]
-        log.info("Triggering Ed sensor = {0} ({1})".format(edsam, type(edsam)))
-        return self.sample_all(trigger_id, sams_included=edsam)
-
-    def sample_all(self, trigger_id, sams_included=None):
+    def sample_all(self, trigger_id, sams_included=None, inttime=0):
         """Send a command to take a spectral sample from every sensor currently detected by the program"""
         self.lasttrigger = datetime.datetime.now()  # this is not used to timestamp measurements, only to track progress
         self.busy = True
@@ -488,12 +416,7 @@ class TriosManager(object):
                 sams_included = self.sams
 
             for s in sams_included:
-                if self.config['inttime'] > 0:
-                    # trigger single measurement at fixed integration time
-                    self.tc[s].startIntSet(self.tc[s].serial, self.config['inttime'], trigger=self.lasttrigger)
-                else:
-                    # trigger single measurement at auto integration time
-                    self.tc[s].startIntAuto(self.tc[s].serial, trigger=self.lasttrigger)
+                self.tc[s].startIntSet(self.tc[s].serial, inttime, trigger=self.lasttrigger)
 
             # follow progress
             npending = len(sams_included)
@@ -515,14 +438,14 @@ class TriosManager(object):
                 self.tc[k].failures +=1
 
             # how long did the measurements take to arrive?
-            if nfinished > 0 and self.config['verbosity_chn'] > 2:
+            if nfinished > 0:
                 if type(self.tc[k].TSAM.lastRawSAMTime) == type(self.lasttrigger) and self.tc[k].TSAM.lastRawSAMTime is not None:
                     delays = [self.tc[k].TSAM.lastRawSAMTime - self.lasttrigger for k in sams_included]
                     delaysec = max([d.total_seconds() for d in delays])
                     log.info("\t{0} spectra received, triggered at {1} ({2} s)"
                         .format(nfinished, self.lasttrigger, delaysec))
 
-            if len(missing) > 0 and self.config['verbosity_chn'] > 0:
+            if len(missing) > 0:
                 log.warning("Incomplete or missing result from {0}".format(",".join(missing)))
 
             # gather succesful results
@@ -532,24 +455,6 @@ class TriosManager(object):
                     for s in sams_included if self.tc[s].is_finished()]
             itimes = [self.tc[s].TSAM.lastIntTime
                     for s in sams_included if self.tc[s].is_finished()]
-
-            # call reboot function for sensors that keep failing, followed by new query on respective COM port?
-            rebooting = False
-            for s in sams_included:
-                if self.tc[s].failures > self.config['allow_consecutive_timeouts']:
-                    rebooting = True
-
-            if rebooting:
-                time_since_last_reboot = datetime.datetime.now()-self.last_cold_start
-                reboot_int = self.config['minimum_reboot_interval_sec']
-                if self.config['use_gpio_control'] and time_since_last_reboot.total_seconds() > reboot_int:
-                    if self.config['verbosity_chn'] > 0:
-                        log.warning("Rebooting sensors")
-                    self.power_cycle_sensors()
-                else:
-                    if self.config['verbosity_chn'] > 0:
-                        log.warning("Reconnecting sensors (no relay control set)")
-                    self.connect_sensors()
 
             self.busy = False
             pre_incs = [None]
