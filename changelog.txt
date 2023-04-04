@@ -1,8 +1,9 @@
-Change log for PyTrios
+Change log for pytrioss
 
-See version by calling
->import pytrios as ps
->ps.__version__
+2023.04.04
+
+Upgraded with a slimmer version of a reader as minimum working example: read from either G1 or G2 sensors, set integration time and log to file.
+This has only been developed and tested with RAMSES radiometers.
 
 
 2023.01.04
