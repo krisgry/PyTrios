@@ -47,6 +47,9 @@ def run_sample(port, repeat=1, type=1, inttime=0, file=None):
             except KeyboardInterrupt:
                 repeat = 0
 
+    else:
+        log.warning(f"Radiometry manager not ready. Exiting")
+
     log.info("Stopping radiometry manager..")
     if rad_manager is not None:
         rad_manager.stop()

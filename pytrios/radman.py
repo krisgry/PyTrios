@@ -71,7 +71,7 @@ class TriosG2Manager(object):
         t0 = time.perf_counter()
         while ((time.perf_counter() - t0) < timeout) and (len(instruments_defined) > 0):
             for instrument in instruments_defined:
-                if (not instrument.busy) and (instrument not in self.instruments):
+                if (not instrument.busy) and (instrument.ready) and (instrument not in self.instruments):
                     log.info(f"{instrument.mod['port']}: sensor {instrument.sam} connected.")
                     self.instruments.append(instrument)
                     self.sams.append(instrument.sam)
@@ -79,7 +79,7 @@ class TriosG2Manager(object):
             time.sleep(0.1)
 
         for instrument in instruments_defined:
-            log.warning(f"{instrument.mod['port']}: sensor connection timed out.")
+            log.warning(f"{instrument.mod['port']}: sensor connection unsuccessful.")
 
         self.ready = True
         self.busy = False
@@ -98,8 +98,6 @@ class TriosG2Manager(object):
             else:
                 instruments_included = [inst for inst in self.instruments if inst.sam in sams_included]
 
-            failure = False
-
             for instrument in instruments_included:
                 # set integration time
                 instrument.set_integration_time(inttime)
@@ -117,13 +115,11 @@ class TriosG2Manager(object):
                 # one or more instruments did not return a result
                 pending = [i.sam for i in instruments_included if i.busy]
                 log.warning(f"Timeout: missing result from {','.join([p for p in pending])}")
-                failure = True
 
             instruments_valid = []
             for i in instruments_included:
                 if (i.result is None) or (i.result.spectrum is None) or (instrument.last_received < instrument.last_sampled):
                     log.warning(f"No new measurement from {i.sam}")
-                    failure = True
                 else:
                     instruments_valid.append(i)
 
@@ -193,7 +189,6 @@ class TriosG2Ramses(object):
 
     def connect(self):
         """(re)connect all serial ports and query all sensors."""
-        self.busy = True
 
         if (self.mod['serial'] is not None) and (self.mod['serial'].isOpen()):
             log.info(f"Closing port {self.mod['port']}")
@@ -206,19 +201,19 @@ class TriosG2Ramses(object):
         t0 = time.perf_counter()
         timeout = 15
         log.info(f"{self.mod['port']}: checking sensor sleep state")
-        while (sleeptime is None) and (time.perf_counter() - t0 < timeout):
+        while (sleeptime is None) and ((time.perf_counter() - t0) < timeout):
             sleeptime = pt2.read_one_register(self.mod, 'deep_sleep_timeout')
             if sleeptime is None:
                 log.warning(f"{self.mod['port']}: failed to read sensor sleep state. Retry for {timeout - (time.perf_counter() - t0):2.1f} s")
                 time.sleep(1.0)
-            elif sleeptime > 0:
+            else:
                 log.info(f"{self.mod['port']}: deep sleep status/time: {sleeptime}")
 
         log.info(f"{self.mod['port']}: checking sensor measurement timer")
         meastime = pt2.read_one_register(self.mod, 'measurement_timeout')
         if meastime is None:
             log.warning(f"{self.mod['port']}: failed to read sensor measurement timer.")
-        elif meastime > 0:
+        elif meastime >= 0:
             #log.info("Setting integration time to auto (0)")
             #pt2.set_integration_time(mod, inttime=0)
             #inttime = read_one_register(mod, 'integration_time_cfg')
@@ -228,6 +223,9 @@ class TriosG2Ramses(object):
         lanstate0 = pt2.get_lan_state(self.mod)
         if lanstate0 is None:
             log.warning(f"{self.mod['port']}: failed to detect LAN state.")
+        else:
+            log.info(f"LAN state: {landstate0}")
+
         #elif lanstate0:
         #    log.info(f"{self.mod['port']}: disable LAN state.")
         #    pt2.set_lan_state(self.mod, False)
@@ -236,9 +234,13 @@ class TriosG2Ramses(object):
         inttime = pt2.read_one_register(self.mod, 'integration_time_cfg')
         if inttime is None:
             log.warning(f"{self.mod['port']}: failed to detect integration time setting.")
+        else:
+            log.info(f"Integration time setting: {inttime}")
+
+        self.busy = False
+
 
     def set_integration_time(self, inttime=0):
-        self.ready = False
         self.busy = True
         inttime_index = int(log2(inttime)-1)
         log.info(f"{self.mod['port']}: setting integration time to {inttime} ({inttime_index})")
@@ -248,7 +250,6 @@ class TriosG2Ramses(object):
             log.warning(f"{self.mod['port']}: failed to detect integration time setting.")
         else:
             log.info(f"{self.mod['port']}: Integration time: {inttime_read}")
-        self.ready = True
         self.busy = False
 
 
