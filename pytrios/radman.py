@@ -378,8 +378,9 @@ class TriosManager(object):
             # set verbosity for com channel (com messages / errors)
             # 0/1/2 = none, errors, all
             com.verbosity = 1
-            # query connected instruments
-            ps.TCommandSend(com, commandset=None, command='query')
+            for chan in ['02', '04', '06', '08']:
+                # query connected instruments
+                ps.TCommandSend(com, commandset=None, ipschan=chan, command='query')
         time.sleep(3)  # pause to receive query results
         self._identify_sensors()
 
