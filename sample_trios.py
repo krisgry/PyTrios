@@ -82,14 +82,16 @@ if __name__ == '__main__':
     if args.type is None:
         log.info("No device type selected. Specify G1 or G2 type")
         sys.exit()
-    elif args.type == 1 and args.inttime>0:
-        if args.inttime not in [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192]:
-            log.info("Integration time for G1 sensors must be one of 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192 ms")
-            sys.exit()
-    elif args.type == 2 and args.inttime>0:
-        if args.inttime not in [4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192]:
-            log.info("Integration time for G2 sensors must be one of 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192 ms")
-            sys.exit()
+    elif args.type == 1:
+        if args.inttime>0:
+            if args.inttime not in [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192]:
+                log.info("Integration time for G1 sensors must be one of 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192 ms")
+                sys.exit()
+    elif args.type == 2:
+        if args.inttime>0:
+            if args.inttime not in [4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192]:
+                log.info("Integration time for G2 sensors must be one of 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192 ms")
+                sys.exit()
     else:
         log.info("Sensor type must be 1 (G1) or 2 (G2)")
         sys.exit()
