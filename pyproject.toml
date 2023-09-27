@@ -1,5 +1,6 @@
 # Package creation file.
 #
+# For package installation: pip install .
 # For editable package: pip install -e .
 #
 # See also:
