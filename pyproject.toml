@@ -3,11 +3,7 @@
 # For package installation: pip install .
 # For editable package: pip install -e .
 #
-# See also:
-# - https://packaging.python.org/en/latest/tutorials/packaging-projects/
-# - https://pip.pypa.io/en/stable/reference/build-system/pyproject-toml/
-# - https://docs.pytest.org/en/latest/explanation/goodpractices.html
-# - https://realpython.com/python-application-layouts/
+# To uninstall: pip uninstall pytrios
 
 [build-system]
 requires = ["hatchling", "numpy", "pyserial>=3.4"]
@@ -16,8 +12,3 @@ build-backend = "hatchling.build"
 [project]
 name = "pytrios"
 version = "1.0.0"
-
-[tool.pytest.ini_options]
-addopts = [
-    "--import-mode=importlib",
-]
