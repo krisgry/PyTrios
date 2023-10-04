@@ -1,0 +1,14 @@
+# Package creation file.
+#
+# For package installation: pip install .
+# For editable package: pip install -e .
+#
+# To uninstall: pip uninstall pytrios
+
+[build-system]
+requires = ["hatchling", "numpy", "pyserial>=3.4"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pytrios"
+version = "1.0.0"
