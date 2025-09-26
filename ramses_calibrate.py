@@ -199,7 +199,7 @@ def raw2cal_Air(spec, msdate, serialn,
     if len(calsensind) > 1:
         calsensdates = [SAMDateTime_Air[i] for i in calsensind]
         tdeltas = [(msdate-x) for x in calsensdates
-                   if (msdate-x).days > 0]
+                if (msdate-x).days > 0]
         calsensind = [calsensind[tdeltas.index(min(tdeltas))]]
 
     Cal = CalData[calsensind[0]]
@@ -209,8 +209,8 @@ def raw2cal_Air(spec, msdate, serialn,
     dp1 = Cal.ini.DarkPixelStart
     dp2 = Cal.ini.DarkPixelStop
     wave = [0.0] * 256
-    for i in range(1, len(wave)+1, 1):
-        wave[i-1] = (Cal.ini.c0s) + (Cal.ini.c1s*(i+1)) +\
+    for i in range(0, len(wave), 1):
+        wave[i] = (Cal.ini.c0s) + (Cal.ini.c1s*(i+1)) +\
             (Cal.ini.c2s*(i+1)**2) + (Cal.ini.c3s*(i+1)**3)
 
     t0 = 8192
@@ -222,7 +222,7 @@ def raw2cal_Air(spec, msdate, serialn,
     B = B0 + (t1/t0*B1)
     C = M - B
     # subtract dark offset,
-    Offset = np.mean(C[dp1-1:dp2])  # dark pixels
+    Offset = np.mean(C[dp1:dp2+1])  # dark pixels 
     D = C-Offset
     E = D*(t0/t1)
     # Scale the spectrum to the Air calibration
